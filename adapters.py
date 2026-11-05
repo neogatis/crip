@@ -99,18 +99,30 @@ async def listen_okx(symbols, send):
 async def listen_gate(symbols, send):
     url='wss://api.gateio.ws/ws/v4/'
     async with websockets.connect(url, ping_interval=20, max_size=2**22) as ws:
-        for symbol in symbols:
-            await ws.send(json.dumps({'time':int(time.time()),'channel':'spot.order_book',
-                'event':'subscribe','payload':[f'{symbol}_USDT','20','100ms']}))
-            await asyncio.sleep(0.12)
-        async for raw in ws:
-            msg=json.loads(raw)
-            if msg.get('channel')!='spot.order_book' or msg.get('event')!='update':
-                continue
-            d=msg.get('result') or {}
-            symbol=d.get('s','').removesuffix('_USDT')
-            if symbol in symbols:
-                emit('gate',symbol,d.get('bids',[]),d.get('asks',[]),send)
+        # Subscribe while consuming incoming frames. With hundreds of pairs,
+        # blocking the reader during subscription would accumulate stale data.
+        async def subscribe():
+            for symbol in symbols:
+                await ws.send(json.dumps({'time':int(time.time()),'channel':'spot.order_book',
+                    'event':'subscribe','payload':[f'{symbol}_USDT','20','100ms']}))
+                await asyncio.sleep(0.12)
+        subscription=asyncio.create_task(subscribe())
+        subscribed=set(symbols)
+        try:
+            async for raw in ws:
+                msg=json.loads(raw)
+                if msg.get('event')=='subscribe' and msg.get('error'):
+                    LOG.warning('gate subscription error: %s',msg.get('error'))
+                if msg.get('channel')!='spot.order_book' or msg.get('event')!='update':
+                    continue
+                d=msg.get('result') or {}
+                symbol=d.get('s','').removesuffix('_USDT')
+                if symbol in subscribed:
+                    emit('gate',symbol,d.get('bids',[]),d.get('asks',[]),send)
+        finally:
+            subscription.cancel()
+            with suppress(asyncio.CancelledError):
+                await subscription
 
 async def listen_bitget(symbols, send):
     url='wss://ws.bitget.com/v3/ws/public'
