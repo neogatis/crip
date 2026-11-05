@@ -16,6 +16,7 @@ from discovery import discover
 from engine import dec, estimate
 from risk import classify_route
 from connectivity_probe import run_probes
+from dashboard import run_dashboard
 
 logging.basicConfig(level=os.environ.get('LOG_LEVEL','INFO').upper(),
                     format='%(asctime)s %(levelname)s %(name)s %(message)s')
@@ -171,9 +172,13 @@ async def run():
                 'top_of_book_gross':raw_top,
                 'top_depth_adjusted_gross':[build_entry(r) for r in ranked_gross[:5]],
                 'top_estimated_net':[build_entry(r) for r in ranked_net[:5]],
+                'routes':[build_entry(r) for r in ranked_net[:120]],
+                'gross_routes':[build_entry(r) for r in ranked_gross[:75]],
                 'note':'Historical best within latest 20s, not simultaneous snapshots or executable quotes; fees assumed and asset identities unverified.',
             }
-            LOG.info('SPREAD_REPORT %s',json.dumps(payload,ensure_ascii=False,separators=(',',':')))
+            # Persist expanded rankings for the UI, but keep Railway logs compact.
+            brief={k:v for k,v in payload.items() if k not in ('routes','gross_routes')}
+            LOG.info('SPREAD_REPORT %s',json.dumps(brief,ensure_ascii=False,separators=(',',':')))
             store.save_spread_report(payload)
             observed_spreads.clear()
             observed_raw.clear()
@@ -185,6 +190,7 @@ async def run():
            for name in requested if venue_symbols.get(name)]
     tasks.append(asyncio.create_task(report_diagnostics(),name='market-data-health'))
     tasks.append(asyncio.create_task(run_probes(),name='regional-exchange-probes'))
+    tasks.append(asyncio.create_task(run_dashboard(),name='private-research-dashboard'))
     async with aiohttp.ClientSession() as session:
         try:
             # Best gross/net snapshots are diagnostic, not executable opportunities.
@@ -218,7 +224,7 @@ async def run():
                             r=estimate(buy,sell,amount,
                                 fee_bps[buy.exchange],fee_bps[sell.exchange],
                                 slippage_bps,rebalance_bps)
-                            if r is not None and amount == dec(50):
+                            if r is not None:
                                 evaluated_candidates+=1
                                 existing=observed_spreads.get(key)
                                 if existing is None or r['net_pct']>existing['net_pct']:
