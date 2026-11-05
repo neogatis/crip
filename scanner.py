@@ -14,7 +14,7 @@ import aiohttp
 from adapters import ADAPTERS, supervise
 from discovery import discover
 from engine import dec, estimate
-from risk import classify_route
+from risk import classify_route, is_known_collision
 from connectivity_probe import run_probes
 from dashboard import run_dashboard
 
@@ -206,7 +206,7 @@ async def run():
                 active=set()
                 for buy in current:
                     for sell in current:
-                        if buy.exchange==sell.exchange:
+                        if buy.exchange==sell.exchange or is_known_collision(buy.exchange,sell.exchange,book.symbol):
                             continue
                         if buy.asks and sell.bids and buy.asks[0][0]>0:
                             top_buy=buy.asks[0][0]
