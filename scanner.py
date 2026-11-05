@@ -15,7 +15,7 @@ from adapters import ADAPTERS, supervise
 from discovery import discover
 from engine import dec, estimate
 from risk import classify_route, is_known_collision
-from identity import IDENTITY_MODE, same_asset
+from identity import IDENTITY_MODE, same_asset, resolve_asset
 from connectivity_probe import run_probes
 from dashboard import run_dashboard
 
@@ -92,12 +92,13 @@ async def run():
         mapping,selected=await discover(requested,
             max_pairs=int(os.environ.get('MAX_PAIRS','60')),
             min_exchanges=2,
-            min_gate_volume_usdt=int(os.environ.get('MIN_GATE_VOLUME_USDT','0')))
+            min_gate_volume_usdt=int(os.environ.get('MIN_GATE_VOLUME_USDT','0')),
+            scout_mode=True)
         if selected:
             symbols=selected
             venue_symbols={v:mapping.get(v,[]) for v in requested}
         else:
-            raise RuntimeError('No verified common native asset listings; fail closed (no ticker-only fallback)')
+            raise RuntimeError('No common active spot pairs discovered; scanner cannot run safely')
     amounts=[dec(x) for x in os.environ.get('TRADE_AMOUNTS_USDT','25,50').split(',')]
     fee_bps={**DEFAULT_FEES_BPS,**json.loads(os.environ.get('FEE_BPS_JSON','{}'))}
     min_net_pct=dec(os.environ.get('MIN_NET_PCT','0.30'))
@@ -116,8 +117,10 @@ async def run():
     last_scan=defaultdict(lambda:0)
     scan_interval=float(os.environ.get('SCAN_INTERVAL_SECONDS','0.5'))
     observed_spreads={}
+    observed_candidates={}
     observed_raw={}
     evaluated_candidates=0
+    evaluated_scout=0
 
     def send(book):
         feed_counters[book.exchange]+=1
@@ -129,7 +132,7 @@ async def run():
     LOG.info('Public-data scanner: %s; symbols: %s; amounts: %s; identity=%s',requested,symbols,amounts,IDENTITY_MODE)
     LOG.warning('RESEARCH ONLY: No authenticated APIs, no account fees, no trading, no executable signals.')
     async def report_diagnostics():
-        nonlocal evaluated_candidates
+        nonlocal evaluated_candidates, evaluated_scout
         while True:
             await asyncio.sleep(20)
             now=time.monotonic()
@@ -154,6 +157,10 @@ async def run():
             ranked_gross=sorted(snapshots,key=lambda r:r['gross_spread_pct'],reverse=True)
             ranked_net=sorted(snapshots,key=lambda r:r['net_pct'],reverse=True)
             ranked_raw=sorted(observed_raw.values(),key=lambda r:r['raw_gross_pct'],reverse=True)
+            scout_snapshots=list(observed_candidates.values())
+            ranked_scout=sorted(scout_snapshots,key=lambda r:r['net_pct'],reverse=True)
+            scout_plausible=[r for r in ranked_scout if r['gross_spread_pct']<dec(10)]
+            scout_anomalies=[r for r in ranked_scout if r['gross_spread_pct']>=dec(10)]
             raw_top=[
                 {'pair':r['symbol'],'buy':r['buy'],'sell':r['sell'],
                  'top_of_book_gross_pct':round(float(r['raw_gross_pct']),5),
@@ -165,9 +172,14 @@ async def run():
                 'type':'SPREAD_REPORT','timestamp':datetime.now(timezone.utc).isoformat(),
                 'mode':'RESEARCH_ONLY','identity_mode':IDENTITY_MODE,
                 'universe_count':len(symbols),
+                'curated_symbols':sum(resolve_asset(sym) is not None for sym in symbols),
+                'scout_symbols':sum(resolve_asset(sym) is None for sym in symbols),
                 'live_books_by_venue':dict(fresh),
                 'evaluations':evaluated_candidates,
                 'depth_qualified_routes':len(snapshots),
+                'scout_depth_routes':len(scout_snapshots),
+                'scout_net_positive':sum(r['net_pct']>0 for r in scout_snapshots),
+                'scout_evaluations':evaluated_scout,
                 'gross_positive':sum(r['gross_spread_pct']>0 for r in snapshots),
                 'net_positive':sum(r['net_pct']>0 for r in snapshots),
                 'net_above_signal_threshold':sum(r['net_pct']>=min_net_pct for r in snapshots),
@@ -176,15 +188,19 @@ async def run():
                 'top_estimated_net':[build_entry(r) for r in ranked_net[:5]],
                 'routes':[build_entry(r) for r in ranked_net[:120]],
                 'gross_routes':[build_entry(r) for r in ranked_gross[:75]],
-                'note':'Native assets from manually curated canonical registry; network/chain support, account fees and KZ trading eligibility UNVERIFIED; best observations over 20s.',
+                'scout_routes':[build_entry(r) for r in scout_plausible[:120]],
+                'scout_anomalies':[build_entry(r) for r in scout_anomalies[:25]],
+                'note':'Two tracks: curated-native research signals plus unverified scout candidates (NO ALERTS). Neither confirms exchange contract, account eligibility, transfer network or executable profit.',
             }
             # Persist expanded rankings for the UI, but keep Railway logs compact.
-            brief={k:v for k,v in payload.items() if k not in ('routes','gross_routes')}
+            brief={k:v for k,v in payload.items() if k not in ('routes','gross_routes','scout_routes','scout_anomalies')}
             LOG.info('SPREAD_REPORT %s',json.dumps(brief,ensure_ascii=False,separators=(',',':')))
             store.save_spread_report(payload)
             observed_spreads.clear()
+            observed_candidates.clear()
             observed_raw.clear()
             evaluated_candidates=0
+            evaluated_scout=0
             if not fresh:
                 LOG.warning('HEALTH no fresh order books; spread absence cannot be established')
 
@@ -208,8 +224,7 @@ async def run():
                 active=set()
                 for buy in current:
                     for sell in current:
-                        if (not same_asset(buy.exchange,sell.exchange,book.symbol)
-                                or is_known_collision(buy.exchange,sell.exchange,book.symbol)):
+                        if buy.exchange==sell.exchange or is_known_collision(buy.exchange,sell.exchange,book.symbol):
                             continue
                         if buy.asks and sell.bids and buy.asks[0][0]>0:
                             top_buy=buy.asks[0][0]
@@ -227,11 +242,20 @@ async def run():
                             r=estimate(buy,sell,amount,
                                 fee_bps[buy.exchange],fee_bps[sell.exchange],
                                 slippage_bps,rebalance_bps)
+                            vetted=same_asset(buy.exchange,sell.exchange,book.symbol)
                             if r is not None:
-                                evaluated_candidates+=1
-                                existing=observed_spreads.get(key)
+                                target=observed_spreads if vetted else observed_candidates
+                                if vetted:
+                                    evaluated_candidates+=1
+                                else:
+                                    evaluated_scout+=1
+                                existing=target.get(key)
                                 if existing is None or r['net_pct']>existing['net_pct']:
-                                    observed_spreads[key]=r
+                                    target[key]=r
+                            # Candidate-only lane is never alerted or saved as a trade signal.
+                            if not vetted:
+                                first_seen.pop(key,None)
+                                continue
                             if r is None or r['net_pct'] < min_net_pct:
                                 first_seen.pop(key,None)
                                 continue
