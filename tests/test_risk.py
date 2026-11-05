@@ -15,7 +15,7 @@ class RiskClassificationTests(unittest.TestCase):
 
     def test_unknown_ticker_requires_identity_verification(self):
         r=classify_route('gate','kraken','XYZQQ/USDT')
-        self.assertEqual(r['asset_identity'],'TICKER_ONLY_REVIEW')
+        self.assertEqual(r['asset_identity'],'UNVERIFIED_EXCLUDED')
 
     def test_definitive_is_not_edgex(self):
         self.assertTrue(is_known_collision('gate','bitget','EDGE/USDT'))
