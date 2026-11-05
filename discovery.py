@@ -124,22 +124,24 @@ def parse_gate_quote_volume(payload):
     return data
 
 def select_universe(available, volume=None, max_pairs=100, min_exchanges=2,
-                    min_gate_volume_usdt=0):
+                    min_gate_volume_usdt=0, scout_mode=False):
     volume = volume or {}
     counts = Counter(s for symbols in available.values() for s in symbols)
     eligible = [s for s, count in counts.items() if count >= min_exchanges and safe_base(s)
-                and resolve_asset(s) is not None
+                and (scout_mode or resolve_asset(s) is not None)
                 and (s not in volume or volume[s] >= Decimal(str(min_gate_volume_usdt)))]
     # Preference to high Gate-quoted 24h volume when reported; a preferred liquid
     # reference set breaks ties, but is not an assertion about live liquidity.
     preferred = {symbol:i for i,symbol in enumerate(PREFERRED)}
     eligible.sort(key=lambda s: (
+        (0 if resolve_asset(s) is not None else 1) if scout_mode else 0,
         -(1 if s in volume else 0), -volume.get(s, Decimal(0)),
         preferred.get(s, 999), -counts[s], s
     ))
     return eligible[:max(1, min(int(max_pairs), 300))]
 
-async def discover(venues, max_pairs=100, min_exchanges=2, min_gate_volume_usdt=0):
+async def discover(venues, max_pairs=100, min_exchanges=2, min_gate_volume_usdt=0,
+                   scout_mode=False):
     enabled = [v for v in venues if v in API_URLS]
     if len(enabled) < 2:
         raise ValueError('Require at least two discoverable venues')
@@ -165,9 +167,13 @@ async def discover(venues, max_pairs=100, min_exchanges=2, min_gate_volume_usdt=
         except Exception as exc:
             LOG.warning('Gate volume metadata unavailable; no volume qualification: %s', exc)
             volumes = {}
-        selected = select_universe(available, volumes, max_pairs, min_exchanges, min_gate_volume_usdt)
+        selected = select_universe(available, volumes, max_pairs, min_exchanges, min_gate_volume_usdt,
+                                   scout_mode=scout_mode)
         mapping = {v:[s for s in selected if s in listed] for v,listed in available.items()}
-        LOG.info('IDENTITY_MODE=%s enabled=%d (excluded all ambiguous/unregistered token tickers)', IDENTITY_MODE, len(selected))
+        LOG.info('IDENTITY_MODE=%s selected=%d curated=%d scouting_unverified=%d',
+                 IDENTITY_MODE, len(selected),
+                 sum(resolve_asset(s) is not None for s in selected),
+                 sum(resolve_asset(s) is None for s in selected))
         LOG.info('Selected %d shared USDT pairs (requested cap %d), %s',
                  len(selected), max_pairs, {v:len(a) for v,a in mapping.items()})
         return mapping, selected
