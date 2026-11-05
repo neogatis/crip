@@ -12,26 +12,25 @@ from dataclasses import dataclass
 # AFSA has specifically cautioned about the following global platforms.
 AFSA_CAUTION = frozenset({"okx", "bitget"})
 
-# Recognizable symbols are ONLY a heuristic to reduce token ticker collisions.
-# Even these require verification of the exact underlying asset and transfer network.
-RECOGNIZABLE_BASES = frozenset({
-    "BTC","ETH","SOL","XRP","BNB","DOGE","ADA","LINK","LTC","AVAX",
-    "TRX","SUI","DOT","ARB","OP","APT","SHIB","PEPE","UNI",
-    "NEAR","ATOM","ETC","BCH","AAVE","XLM","XMR","USDC",
-})
+from identity import identity_details
 
 def classify_route(buy: str, sell: str, pair: str) -> dict:
-    """No eligible real-trading venue is confirmed by this research-only service."""
-    base = pair.split("/", 1)[0].upper()
+    """Strict explicit registry; KZ eligibility and transfer channels remain unchecked."""
     caution = any(venue in AFSA_CAUTION for venue in (buy, sell))
+    region = 'GLOBAL_BINANCE_NOT_KZ' if 'binance_public' in (buy,sell) else (
+        'AFSA_CAUTION_REVIEW' if caution else 'LICENSE_NOT_VERIFIED')
+    details=identity_details(pair)
     return {
-        "trade_readiness": "RESEARCH_ONLY",
-        "kazakhstan_status": "AFSA_CAUTION_REVIEW" if caution else "LICENSE_NOT_VERIFIED",
-        "asset_identity": "TICKER_ONLY_REVIEW" if base not in RECOGNIZABLE_BASES
-                         else "TOKEN_NETWORK_CHECK_REQUIRED",
-        "account_fees_verified": False,
-        "balances_verified": False,
-        "execution_enabled": False,
+        'trade_readiness':'RESEARCH_ONLY',
+        'kazakhstan_status':region,
+        'asset_identity':details['identity_status'],
+        'canonical_asset_id':details.get('canonical_asset_id'),
+        'asset_name':details.get('asset_name'),
+        'identity_method':details['identity_method'],
+        'transfer_network_verified':False,
+        'account_fees_verified':False,
+        'balances_verified':False,
+        'execution_enabled':False,
     }
 
 # Source-verified ticker collision: Gate EDGE/USDT is Definitive EDGE on Base;
