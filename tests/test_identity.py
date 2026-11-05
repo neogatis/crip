@@ -21,6 +21,18 @@ class IdentityGateTests(unittest.TestCase):
         result=select_universe(known,max_pairs=200,min_exchanges=2)
         self.assertEqual(set(result),{'BTC','ETH'})
         self.assertNotIn('EDGE',result)
+    def test_scout_retains_unverified_symbols_but_prioritizes_curated(self):
+        known={'gate':{'EDGE','UP','BTC','ETH','PEPE','LINK'},
+               'bitget':{'EDGE','UP','BTC','ETH','PEPE','LINK'},
+               'bybit_kz':{'BTC','ETH','PEPE','LINK'}}
+        result=select_universe(known,volume={'EDGE':1,'UP':1,'BTC':100000},
+                               max_pairs=8,min_gate_volume_usdt=100000,scout_mode=True)
+        self.assertIn('EDGE',result)
+        self.assertIn('PEPE',result)
+        self.assertIn('LINK',result)
+        self.assertEqual(set(result[:2]),{'BTC','ETH'})
+        self.assertTrue(set(result[2:]).issubset({'EDGE','UP','PEPE','LINK'}))
+
     def test_binance_spot_only_and_exact_symbols(self):
         data={'symbols':[
             {'baseAsset':'BTC','quoteAsset':'USDT','status':'TRADING','isSpotTradingAllowed':True,'symbol':'BTCUSDT'},
