@@ -57,7 +57,7 @@ ASSETS={s:NativeAsset(s,c,n,net) for s,c,n,net in _NATIVE}
 # Blocked tokens include known collisions. Never accept a ticker absent from
 # ASSETS, even when two public market listings have the same abbreviation.
 KNOWN_COLLISIONS=frozenset({'EDGE','UP'})
-IDENTITY_MODE='curated_native_fail_closed_v1'
+IDENTITY_MODE='dual_track_scout_v2'
 
 def resolve_asset(symbol: str):
     return ASSETS.get(str(symbol).upper().strip())
