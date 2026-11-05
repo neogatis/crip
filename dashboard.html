@@ -36,7 +36,7 @@ main{padding:34px 35px 40px;min-width:0}.top{display:flex;justify-content:space-
 </aside><main>
 <div class="top"><div><div class="eyebrow">LIVE MARKET INTELLIGENCE</div><h1 class="title">Мониторинг арбитража</h1><p class="sub">Сравнение цен и расчётных спредов между биржами. Обновление интерфейса каждые 5 секунд; отчётное окно сканера — 20 секунд.</p></div>
 <div class="top-right"><span class="timechip" id="last">Нет данных</span><span class="status warn" id="liveStatus">Соединение…</span></div></div>
-<div class="warning"><strong>⚠</strong><div>Research only. Совпадение тикера не означает, что это один токен: EDGE/USDT на разных биржах уже дал ложный спред свыше 200%. Даже положительная расчётная прибыль <b>не означает</b> возможность сделки в Казахстане. Проверяйте контракты, торговые ограничения и фактические комиссии.</div></div>
+<div class="warning"><strong>⚠</strong><div>Research only. Совпадение тикера не означает, что это один токен: EDGE/USDT на разных биржах уже дал ложный спред свыше 200% и исключён новой защитой. Даже положительная расчётная прибыль <b>не означает</b> возможность сделки в Казахстане. Проверяйте контракты, торговые ограничения и фактические комиссии.</div></div>
 <section class="grid">
 <div class="kpi"><div class="kpi-label">Найдено общих пар</div><div class="kpi-value" id="k-pairs">—</div><div class="kpi-note">В каталоге сканера</div></div>
 <div class="kpi"><div class="kpi-label">Маршрутов с глубиной</div><div class="kpi-value" id="k-routes">—</div><div class="kpi-note">Смоделирована сделка</div></div>
@@ -47,9 +47,9 @@ main{padding:34px 35px 40px;min-width:0}.top{display:flex;justify-content:space-
 <div class="toolbar">
 <div class="tabs"><button class="tab active" data-tab="net">Чистая оценка</button><button class="tab" data-tab="gross">Валовый спред</button><button class="tab" data-tab="raw">Котировки</button></div>
 <input id="query" class="search" placeholder="Найти монету или биржу…" aria-label="Найти монету или биржу">
-<select id="venue" class="filter" aria-label="Фильтр биржи"><option value="">Все биржи</option><option value="okx">OKX</option><option value="bitget">Bitget</option><option value="gate">Gate</option><option value="kraken">Kraken</option></select>
+<select id="venue" class="filter" aria-label="Фильтр биржи"><option value="">Все биржи</option><option value="okx">OKX</option><option value="bitget">Bitget</option><option value="gate">Gate</option><option value="kraken">Kraken</option><option value="binance_public">Binance Global (только рынок)</option><option value="bybit_kz">Bybit Kazakhstan</option></select>
 <select id="amount" class="filter" aria-label="Сумма сделки"><option value="50">50 USDT</option><option value="25">25 USDT</option><option value="">Любая сумма</option></select>
-<select id="risk" class="filter" aria-label="Фильтр риска"><option value="">Все, включая рисковые</option><option value="recognizable">Известные тикеры</option><option value="unknown">Неизвестный токен</option><option value="positive">С расчётным плюсом</option></select>
+<select id="risk" class="filter" aria-label="Фильтр риска"><option value="">Все, включая рисковые</option><option value="recognizable">Только из реестра</option><option value="unknown">Не подтверждён</option><option value="positive">С расчётным плюсом</option></select>
 </div>
 <div class="tablewrap"><table><thead><tr><th>Пара</th><th>Купить → продать</th><th>Валовый спред</th><th>После расходов</th><th>На сумму</th><th>Статус</th></tr></thead><tbody id="spreadRows"><tr><td colspan="6" class="empty">Загружаю данные сканера…</td></tr></tbody></table></div>
 <p class="note" id="tableNote">Показатели — лучшие наблюдения внутри 20-секундного окна, не одновременно исполнимые заявки.</p></section>
@@ -81,8 +81,8 @@ function draw(){
  var old=ageSec(report.timestamp);
  $('liveStatus').className=old<=60?'status':old<=150?'status warn':'status bad';
  setText('liveStatus',old<=60?'● Данные актуальны':old<=150?'● С задержкой':'● Данные устарели');
- var parts=[],books=report.live_books_by_venue||{},names={okx:'OKX',bitget:'Bitget',gate:'Gate.io',kraken:'Kraken'};
- ['okx','bitget','gate','kraken'].forEach(function(k){var n=Number(books[k]||0);parts.push('<div class="venue"><b><i class="dot '+(n?'':'off')+'"></i>'+names[k]+'</b><small>'+n+' стаканов</small></div>');});
+ var parts=[],books=report.live_books_by_venue||{},names={okx:'OKX',bitget:'Bitget',gate:'Gate.io',kraken:'Kraken',binance_public:'Binance Global',bybit_kz:'Bybit KZ'};
+ ['okx','bitget','gate','kraken','binance_public','bybit_kz'].forEach(function(k){var n=Number(books[k]||0);parts.push('<div class="venue"><b><i class="dot '+(n?'':'off')+'"></i>'+names[k]+'</b><small>'+n+' стаканов</small></div>');});
  $('venues').innerHTML=parts.join('');
  drawRows(report);drawChart(history);drawHistory(history);
 }
@@ -97,8 +97,8 @@ function drawRows(report){
   if(q&&!(String(x.pair||'')+' '+String(x.buy||'')+' '+String(x.sell||'')).toLowerCase().includes(q))return false;
   if(v&&x.buy!==v&&x.sell!==v)return false;
   if(app.tab!=='raw'&&a&&String(x.model_amount_usdt)!==a)return false;
-  if(rf==='recognizable'&&x.asset_identity==='TICKER_ONLY_REVIEW')return false;
-  if(rf==='unknown'&&x.asset_identity!=='TICKER_ONLY_REVIEW')return false;
+  if(rf==='recognizable'&&x.asset_identity!=='CURATED_NATIVE')return false;
+  if(rf==='unknown'&&x.asset_identity==='CURATED_NATIVE')return false;
   if(rf==='positive'&&Number(x.estimated_net_pct||-100)<=0)return false;
   return true;
  });
@@ -109,8 +109,8 @@ function drawRows(report){
  var rows=arr.slice(0,100).map(function(x){
   var gross=app.tab==='raw'?x.top_of_book_gross_pct:x.gross_pct,net=x.estimated_net_pct;
   var ng=net==null?'dim':Number(net)>=0?'plus':'minus';
-  var risk=x.asset_identity==='TICKER_ONLY_REVIEW';
-  var badge=risk?'⚠ Токен не проверен':'⚠ Сеть не проверена';
+  var risk=x.asset_identity!=='CURATED_NATIVE';
+  var badge=risk?'⚠ Нет идентификатора':'✓ Нативный актив / сеть не проверена';
   return '<tr><td class="pair">'+esc(x.pair)+'</td><td><span class="exchange">'+esc(x.buy)+'</span><span class="arrow">→</span><span class="exchange">'+esc(x.sell)+'</span></td><td class="num '+(gross>=0?'plus':'minus')+'">'+pct(gross)+'</td><td class="num '+ng+'">'+pct(net)+(net!=null?'<div class="dim" style="font-weight:400">'+money(x.estimated_net_usdt)+'</div>':'')+'</td><td>'+esc(x.model_amount_usdt==null?'без глубины':x.model_amount_usdt+' USDT')+'</td><td><span class="flag">'+badge+'</span></td></tr>';
  });
  $('spreadRows').innerHTML=rows.join('')||'<tr><td colspan="6" class="empty">Под заданные фильтры подходящих маршрутов нет.</td></tr>';
