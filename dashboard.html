@@ -36,16 +36,16 @@ main{padding:34px 35px 40px;min-width:0}.top{display:flex;justify-content:space-
 </aside><main>
 <div class="top"><div><div class="eyebrow">LIVE MARKET INTELLIGENCE</div><h1 class="title">Мониторинг арбитража</h1><p class="sub">Сравнение цен и расчётных спредов между биржами. Обновление интерфейса каждые 5 секунд; отчётное окно сканера — 20 секунд.</p></div>
 <div class="top-right"><span class="timechip" id="last">Нет данных</span><span class="status warn" id="liveStatus">Соединение…</span></div></div>
-<div class="warning"><strong>⚠</strong><div>Research only. Совпадение тикера не означает, что это один токен: EDGE/USDT на разных биржах уже дал ложный спред свыше 200% и исключён новой защитой. Даже положительная расчётная прибыль <b>не означает</b> возможность сделки в Казахстане. Проверяйте контракты, торговые ограничения и фактические комиссии.</div></div>
+<div class="warning"><strong>⚠</strong><div>Research only. Совпадение тикера не означает, что это один токен: EDGE/USDT на разных биржах уже дал ложный спред свыше 200%. Теперь есть отдельные вкладки для проверенных по реестру активов и непроверенных кандидатов. Ошибочные маршруты Gate ↔ OKX/Bitget исключены. Даже положительная расчётная прибыль <b>не означает</b> возможность сделки в Казахстане. Проверяйте контракты, торговые ограничения и фактические комиссии.</div></div>
 <section class="grid">
 <div class="kpi"><div class="kpi-label">Найдено общих пар</div><div class="kpi-value" id="k-pairs">—</div><div class="kpi-note">В каталоге сканера</div></div>
-<div class="kpi"><div class="kpi-label">Маршрутов с глубиной</div><div class="kpi-value" id="k-routes">—</div><div class="kpi-note">Смоделирована сделка</div></div>
-<div class="kpi"><div class="kpi-label">Расчётный плюс</div><div class="kpi-value good" id="k-positive">—</div><div class="kpi-note">До проверки идентичности</div></div>
+<div class="kpi"><div class="kpi-label">Из реестра активов</div><div class="kpi-value" id="k-routes">—</div><div class="kpi-note">Отобранные нативные монеты</div></div>
+<div class="kpi"><div class="kpi-label">Непроверенных кандидатов</div><div class="kpi-value" id="k-positive">—</div><div class="kpi-note">Только для поиска, без сигналов</div></div>
 <div class="kpi"><div class="kpi-label">Выше порога +0,30%</div><div class="kpi-value" id="k-thresh">—</div><div class="kpi-note">Не означает исполнимость</div></div>
 </section>
 <section class="card"><div class="cardhead"><h2>Спреды и торговые маршруты</h2><span id="countLabel">—</span></div>
 <div class="toolbar">
-<div class="tabs"><button class="tab active" data-tab="net">Чистая оценка</button><button class="tab" data-tab="gross">Валовый спред</button><button class="tab" data-tab="raw">Котировки</button></div>
+<div class="tabs"><button class="tab active" data-tab="net">Отобранные</button><button class="tab" data-tab="gross">Валовый</button><button class="tab" data-tab="raw">Котировки</button><button class="tab" data-tab="scout">Кандидаты</button><button class="tab" data-tab="anomalies">Аномалии</button></div>
 <input id="query" class="search" placeholder="Найти монету или биржу…" aria-label="Найти монету или биржу">
 <select id="venue" class="filter" aria-label="Фильтр биржи"><option value="">Все биржи</option><option value="okx">OKX</option><option value="bitget">Bitget</option><option value="gate">Gate</option><option value="kraken">Kraken</option><option value="binance_public">Binance Global (только рынок)</option><option value="bybit_kz">Bybit Kazakhstan</option></select>
 <select id="amount" class="filter" aria-label="Сумма сделки"><option value="50">50 USDT</option><option value="25">25 USDT</option><option value="">Любая сумма</option></select>
@@ -74,8 +74,8 @@ function draw(){
  var response=app.data, report=response&&response.live, history=response&&response.history||[];
  if(!report){setText('liveStatus','Нет отчётов');$('liveStatus').className='status bad';setText('last','Ожидание');return;}
  setText('k-pairs',Number(report.universe_count||0).toLocaleString('ru-RU'));
- setText('k-routes',Number(report.depth_qualified_routes||0).toLocaleString('ru-RU'));
- setText('k-positive',Number(report.net_positive||0).toLocaleString('ru-RU'));
+ setText('k-routes',Number(report.curated_symbols||0).toLocaleString('ru-RU'));
+ setText('k-positive',Number(report.scout_symbols||0).toLocaleString('ru-RU'));
  setText('k-thresh',Number(report.net_above_signal_threshold||0).toLocaleString('ru-RU'));
  setText('last','Отчёт: '+time(report.timestamp));
  var old=ageSec(report.timestamp);
@@ -88,6 +88,8 @@ function draw(){
 }
 function allRows(report){
  if(app.tab==='raw'){return report.top_of_book_gross||[];}
+ if(app.tab==='scout')return report.scout_routes||[];
+ if(app.tab==='anomalies')return report.scout_anomalies||[];
  var list=app.tab==='gross'?(report.gross_routes||report.top_depth_adjusted_gross||[]):(report.routes||report.top_estimated_net||[]);
  return list;
 }
@@ -99,22 +101,23 @@ function drawRows(report){
   if(app.tab!=='raw'&&a&&String(x.model_amount_usdt)!==a)return false;
   if(rf==='recognizable'&&x.asset_identity!=='CURATED_NATIVE')return false;
   if(rf==='unknown'&&x.asset_identity==='CURATED_NATIVE')return false;
-  if(rf==='positive'&&Number(x.estimated_net_pct||-100)<=0)return false;
+  if(rf==='positive'&&Number(x.estimated_net_pct??-100)<=0)return false;
   return true;
  });
  if(app.tab==='gross')arr.sort(function(a,b){return Number(b.gross_pct||0)-Number(a.gross_pct||0);});
- if(app.tab==='net')arr.sort(function(a,b){return Number(b.estimated_net_pct||-1e6)-Number(a.estimated_net_pct||-1e6);});
+ if(app.tab==='net'||app.tab==='scout'||app.tab==='anomalies')arr.sort(function(a,b){return Number(b.estimated_net_pct??-1e6)-Number(a.estimated_net_pct??-1e6);});
  if(app.tab==='raw')arr.sort(function(a,b){return Number(b.top_of_book_gross_pct||0)-Number(a.top_of_book_gross_pct||0);});
  setText('countLabel',arr.length+' из '+allRows(report).length+' наблюдений');
  var rows=arr.slice(0,100).map(function(x){
   var gross=app.tab==='raw'?x.top_of_book_gross_pct:x.gross_pct,net=x.estimated_net_pct;
-  var ng=net==null?'dim':Number(net)>=0?'plus':'minus';
+  var riskView=app.tab==='scout'||app.tab==='anomalies';
+  var ng=net==null?'dim':riskView?'dim':Number(net)>=0?'plus':'minus';
   var risk=x.asset_identity!=='CURATED_NATIVE';
-  var badge=risk?'⚠ Нет идентификатора':'✓ Нативный актив / сеть не проверена';
+  var badge=risk?'⚠ Тикер без подтверждения':'✓ Отобранный актив / сеть не проверена';
   return '<tr><td class="pair">'+esc(x.pair)+'</td><td><span class="exchange">'+esc(x.buy)+'</span><span class="arrow">→</span><span class="exchange">'+esc(x.sell)+'</span></td><td class="num '+(gross>=0?'plus':'minus')+'">'+pct(gross)+'</td><td class="num '+ng+'">'+pct(net)+(net!=null?'<div class="dim" style="font-weight:400">'+money(x.estimated_net_usdt)+'</div>':'')+'</td><td>'+esc(x.model_amount_usdt==null?'без глубины':x.model_amount_usdt+' USDT')+'</td><td><span class="flag">'+badge+'</span></td></tr>';
  });
  $('spreadRows').innerHTML=rows.join('')||'<tr><td colspan="6" class="empty">Под заданные фильтры подходящих маршрутов нет.</td></tr>';
- setText('tableNote',app.tab==='raw'?'Только лучшие bid/ask: глубина, комиссии и реальная исполнимость НЕ проверены.':'Расчёт для полной суммы с учётом глубины стакана и предполагаемых расходов. Все маршруты — только исследовательские.');
+ setText('tableNote',(app.tab==='scout'||app.tab==='anomalies')?'НЕПРОВЕРЕННЫЕ: совпадает только тикер. Могут быть РАЗНЫЕ ТОКЕНЫ. Все проценты условные, сигналы и сделки по ним отключены.':'Отобранные нативные активы. Глубина и комиссии моделируются; доступ к торговле и переводам НЕ подтверждён.');
 }
 function drawChart(history){
  var vals=history.map(function(h){return Number(h.best_net);}).filter(function(v){return Number.isFinite(v);});
