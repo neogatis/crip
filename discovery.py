@@ -10,6 +10,7 @@ from collections import Counter
 from decimal import Decimal, InvalidOperation
 
 import aiohttp
+from identity import resolve_asset, IDENTITY_MODE
 
 LOG = logging.getLogger('sarb.discovery')
 SYMBOL_RE = re.compile(r'^[A-Z0-9]{2,15}$')
@@ -60,6 +61,23 @@ def parse_markets(venue, payload):
                     and not x.get('st_tag', False)):
                 base = normalize_base(x.get('base', ''))
                 if safe_base(base): pairs.add(base)
+    elif venue == 'binance_public':
+        if not isinstance(payload, dict) or not isinstance(payload.get('symbols'), list):
+            raise ValueError('Binance exchangeInfo malformed')
+        for x in payload['symbols']:
+            if (x.get('quoteAsset') == 'USDT' and x.get('status') == 'TRADING'
+                    and x.get('isSpotTradingAllowed', True)
+                    and x.get('symbol') == str(x.get('baseAsset',''))+'USDT'):
+                base=normalize_base(x.get('baseAsset',''))
+                if safe_base(base): pairs.add(base)
+    elif venue == 'bybit_kz':
+        if str(payload.get('retCode')) != '0':
+            raise ValueError(f'Bybit instruments error: {payload.get("retMsg")}')
+        for x in (payload.get('result') or {}).get('list',[]):
+            if (x.get('quoteCoin') == 'USDT' and x.get('status') == 'Trading'
+                    and x.get('symbol') == str(x.get('baseCoin',''))+'USDT'):
+                base=normalize_base(x.get('baseCoin',''))
+                if safe_base(base): pairs.add(base)
     elif venue == 'kraken':
         if payload.get('error'):
             raise ValueError(f'Kraken asset pairs error: {payload["error"]}')
@@ -78,6 +96,8 @@ API_URLS = {
     'bitget': 'https://api.bitget.com/api/v3/market/instruments?category=SPOT',
     'gate': 'https://api.gateio.ws/api/v4/spot/currency_pairs',
     'kraken': 'https://api.kraken.com/0/public/AssetPairs',
+    'binance_public': 'https://data-api.binance.vision/api/v3/exchangeInfo',
+    'bybit_kz': 'https://api.bybit.kz/v5/market/instruments-info?category=spot',
 }
 VOLUME_URL = 'https://api.gateio.ws/api/v4/spot/tickers'
 
@@ -108,6 +128,7 @@ def select_universe(available, volume=None, max_pairs=100, min_exchanges=2,
     volume = volume or {}
     counts = Counter(s for symbols in available.values() for s in symbols)
     eligible = [s for s, count in counts.items() if count >= min_exchanges and safe_base(s)
+                and resolve_asset(s) is not None
                 and (s not in volume or volume[s] >= Decimal(str(min_gate_volume_usdt)))]
     # Preference to high Gate-quoted 24h volume when reported; a preferred liquid
     # reference set breaks ties, but is not an assertion about live liquidity.
@@ -146,6 +167,7 @@ async def discover(venues, max_pairs=100, min_exchanges=2, min_gate_volume_usdt=
             volumes = {}
         selected = select_universe(available, volumes, max_pairs, min_exchanges, min_gate_volume_usdt)
         mapping = {v:[s for s in selected if s in listed] for v,listed in available.items()}
+        LOG.info('IDENTITY_MODE=%s enabled=%d (excluded all ambiguous/unregistered token tickers)', IDENTITY_MODE, len(selected))
         LOG.info('Selected %d shared USDT pairs (requested cap %d), %s',
                  len(selected), max_pairs, {v:len(a) for v,a in mapping.items()})
         return mapping, selected
