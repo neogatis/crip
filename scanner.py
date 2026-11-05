@@ -226,7 +226,8 @@ async def run():
                     for sell in current:
                         if buy.exchange==sell.exchange or is_known_collision(buy.exchange,sell.exchange,book.symbol):
                             continue
-                        if buy.asks and sell.bids and buy.asks[0][0]>0:
+                        if (same_asset(buy.exchange,sell.exchange,book.symbol)
+                                and buy.asks and sell.bids and buy.asks[0][0]>0):
                             top_buy=buy.asks[0][0]
                             top_sell=sell.bids[0][0]
                             raw_gap=(top_sell/top_buy-dec(1))*dec(100)
