@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#07121e"><title>S-Arbitrage — Research Terminal</title>
+<style>
+:root{color-scheme:dark;--bg:#07121e;--panel:#0e1d2c;--soft:#132638;--line:#26394b;--text:#edf6fc;--muted:#879eb0;--green:#53d4b2;--red:#ff7685;--gold:#ffcd73;--blue:#80bce9}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 75% -22%,#15444a 0%,transparent 38%),var(--bg);font:14px/1.55 Inter,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;color:var(--text)}button,input,select{font:inherit}a{color:inherit}
+.page{max-width:1500px;margin:auto;display:grid;grid-template-columns:235px minmax(0,1fr);min-height:100vh}
+aside{border-right:1px solid var(--line);padding:30px 17px;background:#091521bb}
+.brand{display:flex;gap:12px;align-items:center;padding:0 10px 30px}.emblem{background:var(--green);color:#062421;border-radius:12px;font-size:20px;font-weight:900;padding:8px 12px}.brand strong{font-size:17px;letter-spacing:.025em}.brand small{display:block;color:var(--muted);letter-spacing:.19em;font-size:9px;font-weight:700}
+.navtitle,.aside-label{font-size:10px;color:#70889a;font-weight:800;letter-spacing:.17em;margin:12px 12px 9px;text-transform:uppercase}.navitem{display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid #24453b;background:#12352e;border-radius:10px;color:var(--green);font-weight:700}.navitem span{font-size:16px}
+.aside-box{margin:24px 2px 16px;padding:15px;background:#122334;border:1px solid var(--line);border-radius:14px}.aside-box strong{font-size:12px}.aside-box p{color:var(--muted);font-size:12px;line-height:1.55;margin:8px 0 0}.venue{display:flex;justify-content:space-between;align-items:center;padding:10px 2px;border-bottom:1px solid #1d3446}.venue:last-child{border:0}.venue b{font-size:13px}.venue small{font-size:11px;color:var(--muted)}.dot{width:7px;height:7px;background:var(--green);display:inline-block;border-radius:50%;box-shadow:0 0 12px #53d4b255;margin-right:8px}.dot.off{background:#5d6975;box-shadow:none}
+.hint{font-size:11px;color:#8297a7;margin:8px 10px}.small-action{background:none;border:1px solid var(--line);border-radius:8px;color:#b7cbd9;padding:8px 12px;cursor:pointer;margin:16px 10px}
+main{padding:34px 35px 40px;min-width:0}.top{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;margin-bottom:22px}
+.eyebrow{color:var(--green);font-size:11px;letter-spacing:.19em;font-weight:850;text-transform:uppercase}.title{font-size:30px;letter-spacing:-.045em;line-height:1.2;margin:6px 0 8px;font-weight:800}.sub{color:var(--muted);margin:0;max-width:700px}
+.top-right{display:flex;align-items:center;gap:11px;flex-wrap:wrap}.timechip,.status{background:var(--panel);border:1px solid var(--line);padding:8px 12px;border-radius:9px;color:#abc1d0;white-space:nowrap;font-size:12px}.status{color:var(--green);border-color:#27594f}.status.warn{color:var(--gold);border-color:#765a35}.status.bad{color:var(--red);border-color:#7d3947}
+.warning{border:1px solid #665133;background:linear-gradient(110deg,#342b203d,#2c241a16);padding:13px 17px;border-radius:12px;color:#f2d5a3;margin-bottom:22px;font-size:12px;display:flex;gap:10px;align-items:flex-start}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-bottom:22px}.kpi,.card{background:linear-gradient(145deg,#132438,#0d1a28);border:1px solid var(--line);border-radius:15px}.kpi{padding:18px 20px}.kpi-label{font-size:11px;color:#94acbd;text-transform:uppercase;font-weight:800;letter-spacing:.08em}.kpi-value{font-size:31px;letter-spacing:-.05em;font-weight:830;margin:7px 0 2px;line-height:1.2}.kpi-note{font-size:11px;color:var(--muted)}.kpi-value.good{color:var(--green)}
+.card{padding:19px 20px;margin-bottom:20px}.cardhead{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:14px}.cardhead h2{font-size:16px;letter-spacing:-.015em;margin:0}.cardhead span{font-size:11px;color:var(--muted)}
+.toolbar{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin-bottom:16px}.tabs{display:flex;gap:4px;padding:4px;background:#091725;border:1px solid #263749;border-radius:11px}.tab{border:0;background:transparent;color:#91aabe;padding:9px 13px;border-radius:8px;cursor:pointer;font-weight:700;font-size:12px}.tab.active{background:#1e4145;color:#66ead0}
+.search,.filter{background:#091725;border:1px solid #2c4052;border-radius:10px;color:#dceaf3;padding:10px 13px;outline:0}.search{min-width:140px;flex:1;max-width:240px}.filter{max-width:164px;cursor:pointer}.search:focus,.filter:focus{border-color:var(--green)}
+.tablewrap{overflow-x:auto}table{width:100%;border-collapse:collapse;white-space:nowrap;font-size:12px}th{text-align:left;color:#8099ab;font-weight:750;border-bottom:1px solid var(--line);padding:11px 13px;text-transform:uppercase;font-size:10px;letter-spacing:.07em}td{padding:13px;border-bottom:1px solid #203344}tr:last-child td{border:0}tbody tr:hover{background:#172b3b}
+.pair{font-weight:800;font-size:13px}.exchange{color:#e2edf6;font-weight:700}.arrow{color:#7892a6;padding:0 7px}.num{font-variant-numeric:tabular-nums;font-weight:750}.plus{color:var(--green)}.minus{color:var(--red)}.dim{color:var(--muted)}.flag{display:inline-block;font-size:10px;border-radius:99px;padding:4px 8px;font-weight:760;background:#453322;color:#ffca8b;max-width:170px;overflow:hidden;text-overflow:ellipsis}.flag.normal{background:#173f38;color:#8de3cc}
+.empty{color:#95aaba;padding:34px 12px;text-align:center;font-size:13px}.note{font-size:11px;color:#8ea5b6;margin:13px 0 0}
+.dual{display:grid;grid-template-columns:1.5fr 1fr;gap:20px}.trend{width:100%;height:170px;background:linear-gradient(180deg,#10313139,#0a182500);border-radius:12px;overflow:hidden}svg{width:100%;height:100%;overflow:visible}.axis-text{fill:#819aac;font-size:10px}.lines{stroke:#294254;stroke-width:1}.trend-line{fill:none;stroke:var(--green);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}.trend-fill{fill:#3fdcb020}
+.history{list-style:none;padding:0;margin:0}.history li{display:flex;justify-content:space-between;gap:9px;padding:10px 0;border-bottom:1px solid #203446;font-size:12px}.history li:last-child{border:0}.history b{font-variant-numeric:tabular-nums}.footnote{color:#8095a7;font-size:11px;line-height:1.7;margin:16px 0 0}.badgenote{color:#f9ce91;border:1px solid #654e2c;border-radius:7px;padding:6px 10px;display:inline-flex;gap:6px;align-items:center;font-size:11px}
+@media(max-width:1150px){.grid{grid-template-columns:repeat(2,1fr)}.dual{grid-template-columns:1fr}}
+@media(max-width:790px){.page{display:block}aside{border-right:0;border-bottom:1px solid var(--line);padding:14px 16px}.brand{padding:0}.navtitle,.navitem,.aside-box,.hint,.small-action{display:none}main{padding:22px 15px}.title{font-size:25px}.top{display:block}.top-right{margin-top:14px}.grid{gap:9px}.kpi{padding:15px 13px}.kpi-value{font-size:25px}.card{padding:15px 12px}.search{max-width:none}.toolbar{align-items:stretch}}
+</style></head>
+<body><div class="page"><aside>
+<div class="brand"><span class="emblem">S</span><div><strong>ARBITRAGE</strong><small>SPREAD MONITOR · 0.4</small></div></div>
+<div class="navtitle">РАБОЧАЯ ПАНЕЛЬ</div><div class="navitem"><span>▤</span>Обзор спредов</div>
+<div class="aside-box"><strong>Состояние источников</strong><div id="venues"></div><p>Число свежих стаканов, не число доступных торговых счетов.</p></div>
+<div class="aside-box"><strong>Безопасность</strong><p>Только публичные биржевые данные. Никаких ордеров, вводов, выводов и API-ключей.</p><p>Статусы допуска к торговле не подтверждены.</p></div>
+<p class="hint">Сервис: Railway / Europe</p>
+<form method="post" action="/logout"><button class="small-action" type="submit">Выйти из панели</button></form>
+</aside><main>
+<div class="top"><div><div class="eyebrow">LIVE MARKET INTELLIGENCE</div><h1 class="title">Мониторинг арбитража</h1><p class="sub">Сравнение цен и расчётных спредов между биржами. Обновление интерфейса каждые 5 секунд; отчётное окно сканера — 20 секунд.</p></div>
+<div class="top-right"><span class="timechip" id="last">Нет данных</span><span class="status warn" id="liveStatus">Соединение…</span></div></div>
+<div class="warning"><strong>⚠</strong><div>Research only. Совпадение тикера не означает, что это один токен: EDGE/USDT на разных биржах уже дал ложный спред свыше 200%. Даже положительная расчётная прибыль <b>не означает</b> возможность сделки в Казахстане. Проверяйте контракты, торговые ограничения и фактические комиссии.</div></div>
+<section class="grid">
+<div class="kpi"><div class="kpi-label">Найдено общих пар</div><div class="kpi-value" id="k-pairs">—</div><div class="kpi-note">В каталоге сканера</div></div>
+<div class="kpi"><div class="kpi-label">Маршрутов с глубиной</div><div class="kpi-value" id="k-routes">—</div><div class="kpi-note">Смоделирована сделка</div></div>
+<div class="kpi"><div class="kpi-label">Расчётный плюс</div><div class="kpi-value good" id="k-positive">—</div><div class="kpi-note">До проверки идентичности</div></div>
+<div class="kpi"><div class="kpi-label">Выше порога +0,30%</div><div class="kpi-value" id="k-thresh">—</div><div class="kpi-note">Не означает исполнимость</div></div>
+</section>
+<section class="card"><div class="cardhead"><h2>Спреды и торговые маршруты</h2><span id="countLabel">—</span></div>
+<div class="toolbar">
+<div class="tabs"><button class="tab active" data-tab="net">Чистая оценка</button><button class="tab" data-tab="gross">Валовый спред</button><button class="tab" data-tab="raw">Котировки</button></div>
+<input id="query" class="search" placeholder="Найти монету или биржу…" aria-label="Найти монету или биржу">
+<select id="venue" class="filter" aria-label="Фильтр биржи"><option value="">Все биржи</option><option value="okx">OKX</option><option value="bitget">Bitget</option><option value="gate">Gate</option><option value="kraken">Kraken</option></select>
+<select id="amount" class="filter" aria-label="Сумма сделки"><option value="50">50 USDT</option><option value="25">25 USDT</option><option value="">Любая сумма</option></select>
+<select id="risk" class="filter" aria-label="Фильтр риска"><option value="">Все, включая рисковые</option><option value="recognizable">Известные тикеры</option><option value="unknown">Неизвестный токен</option><option value="positive">С расчётным плюсом</option></select>
+</div>
+<div class="tablewrap"><table><thead><tr><th>Пара</th><th>Купить → продать</th><th>Валовый спред</th><th>После расходов</th><th>На сумму</th><th>Статус</th></tr></thead><tbody id="spreadRows"><tr><td colspan="6" class="empty">Загружаю данные сканера…</td></tr></tbody></table></div>
+<p class="note" id="tableNote">Показатели — лучшие наблюдения внутри 20-секундного окна, не одновременно исполнимые заявки.</p></section>
+<section class="dual">
+<div class="card"><div class="cardhead"><h2>История максимального расчётного спреда</h2><span>последние 36 отчётов</span></div><div class="trend"><svg viewBox="0 0 800 170" preserveAspectRatio="none" id="chart"><text x="24" y="75" class="axis-text">История появится после первого отчёта</text></svg></div><p class="note">Линия показывает лучшую оценку в каждом 20-секундном отчёте; единичные аномалии могут искажать масштаб.</p></div>
+<div class="card"><div class="cardhead"><h2>Последние отчёты</h2><span>Алматы · UTC+5</span></div><ul class="history" id="history"><li class="dim">Ожидание…</li></ul></div>
+</section>
+<p class="footnote">S-Arbitrage — исследовательский терминал. Система не подключается к вашим торговым аккаунтам и не подтверждает доступность маршрутов в Казахстане. Все комиссии и резервы — оценочные; перед использованием необходимы проверка активов, контрактов, разрешённости площадок, комиссий, балансов и актуальности двух стаканов.</p>
+</main></div>
+<script>
+(function(){
+'use strict';
+var app={tab:'net',data:null,view:'',failed:0};
+var $=function(id){return document.getElementById(id);};
+var esc=function(x){return String(x==null?'':x).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});};
+var pct=function(x){if(x==null)return '—';var n=Number(x);return (n>0?'+':'')+n.toFixed(3).replace('.',',')+'%';};
+var money=function(x){if(x==null)return '—';var n=Number(x);return (n>0?'+':'')+n.toFixed(3).replace('.',',')+' USDT';};
+var time=function(d){if(!d)return '—';try{return new Date(d).toLocaleTimeString('ru-RU',{timeZone:'Asia/Almaty',hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(e){return '—';}};
+function setText(id,x){$(id).textContent=x;}
+function ageSec(ts){return ts?Math.max(0,(Date.now()-Date.parse(ts))/1000):Infinity;}
+function draw(){
+ var response=app.data, report=response&&response.live, history=response&&response.history||[];
+ if(!report){setText('liveStatus','Нет отчётов');$('liveStatus').className='status bad';setText('last','Ожидание');return;}
+ setText('k-pairs',Number(report.universe_count||0).toLocaleString('ru-RU'));
+ setText('k-routes',Number(report.depth_qualified_routes||0).toLocaleString('ru-RU'));
+ setText('k-positive',Number(report.net_positive||0).toLocaleString('ru-RU'));
+ setText('k-thresh',Number(report.net_above_signal_threshold||0).toLocaleString('ru-RU'));
+ setText('last','Отчёт: '+time(report.timestamp));
+ var old=ageSec(report.timestamp);
+ $('liveStatus').className=old<=60?'status':old<=150?'status warn':'status bad';
+ setText('liveStatus',old<=60?'● Данные актуальны':old<=150?'● С задержкой':'● Данные устарели');
+ var parts=[],books=report.live_books_by_venue||{},names={okx:'OKX',bitget:'Bitget',gate:'Gate.io',kraken:'Kraken'};
+ ['okx','bitget','gate','kraken'].forEach(function(k){var n=Number(books[k]||0);parts.push('<div class="venue"><b><i class="dot '+(n?'':'off')+'"></i>'+names[k]+'</b><small>'+n+' стаканов</small></div>');});
+ $('venues').innerHTML=parts.join('');
+ drawRows(report);drawChart(history);drawHistory(history);
+}
+function allRows(report){
+ if(app.tab==='raw'){return report.top_of_book_gross||[];}
+ var list=app.tab==='gross'?(report.gross_routes||report.top_depth_adjusted_gross||[]):(report.routes||report.top_estimated_net||[]);
+ return list;
+}
+function drawRows(report){
+ var q=$('query').value.trim().toLowerCase(),v=$('venue').value,a=$('amount').value,rf=$('risk').value;
+ var arr=allRows(report).filter(function(x){
+  if(q&&!(String(x.pair||'')+' '+String(x.buy||'')+' '+String(x.sell||'')).toLowerCase().includes(q))return false;
+  if(v&&x.buy!==v&&x.sell!==v)return false;
+  if(app.tab!=='raw'&&a&&String(x.model_amount_usdt)!==a)return false;
+  if(rf==='recognizable'&&x.asset_identity==='TICKER_ONLY_REVIEW')return false;
+  if(rf==='unknown'&&x.asset_identity!=='TICKER_ONLY_REVIEW')return false;
+  if(rf==='positive'&&Number(x.estimated_net_pct||-100)<=0)return false;
+  return true;
+ });
+ if(app.tab==='gross')arr.sort(function(a,b){return Number(b.gross_pct||0)-Number(a.gross_pct||0);});
+ if(app.tab==='net')arr.sort(function(a,b){return Number(b.estimated_net_pct||-1e6)-Number(a.estimated_net_pct||-1e6);});
+ if(app.tab==='raw')arr.sort(function(a,b){return Number(b.top_of_book_gross_pct||0)-Number(a.top_of_book_gross_pct||0);});
+ setText('countLabel',arr.length+' из '+allRows(report).length+' наблюдений');
+ var rows=arr.slice(0,100).map(function(x){
+  var gross=app.tab==='raw'?x.top_of_book_gross_pct:x.gross_pct,net=x.estimated_net_pct;
+  var ng=net==null?'dim':Number(net)>=0?'plus':'minus';
+  var risk=x.asset_identity==='TICKER_ONLY_REVIEW';
+  var badge=risk?'⚠ Токен не проверен':'⚠ Сеть не проверена';
+  return '<tr><td class="pair">'+esc(x.pair)+'</td><td><span class="exchange">'+esc(x.buy)+'</span><span class="arrow">→</span><span class="exchange">'+esc(x.sell)+'</span></td><td class="num '+(gross>=0?'plus':'minus')+'">'+pct(gross)+'</td><td class="num '+ng+'">'+pct(net)+(net!=null?'<div class="dim" style="font-weight:400">'+money(x.estimated_net_usdt)+'</div>':'')+'</td><td>'+esc(x.model_amount_usdt==null?'без глубины':x.model_amount_usdt+' USDT')+'</td><td><span class="flag">'+badge+'</span></td></tr>';
+ });
+ $('spreadRows').innerHTML=rows.join('')||'<tr><td colspan="6" class="empty">Под заданные фильтры подходящих маршрутов нет.</td></tr>';
+ setText('tableNote',app.tab==='raw'?'Только лучшие bid/ask: глубина, комиссии и реальная исполнимость НЕ проверены.':'Расчёт для полной суммы с учётом глубины стакана и предполагаемых расходов. Все маршруты — только исследовательские.');
+}
+function drawChart(history){
+ var vals=history.map(function(h){return Number(h.best_net);}).filter(function(v){return Number.isFinite(v);});
+ var svg=$('chart');
+ if(vals.length<2){svg.innerHTML='<text x="24" y="78" class="axis-text">Недостаточно данных для графика</text>';return;}
+ // Clamp very large anomalies to keep the remaining activity readable.
+ var nonExtreme=vals.filter(function(v){return v>-4&&v<5;});
+ var max=Math.max(0.5,...(nonExtreme.length?nonExtreme:vals)),min=Math.min(-0.5,...(nonExtreme.length?nonExtreme:vals));
+ var bounded=vals.map(function(v){return Math.max(min,Math.min(max,v));});
+ var points=bounded.map(function(v,i){return [22+i*756/(bounded.length-1),14+136*(max-v)/(max-min)];});
+ var d=points.map(function(p,i){return (i?'L':'M')+p[0].toFixed(1)+','+p[1].toFixed(1);}).join(' ');
+ var y0=14+136*max/(max-min);
+ var area=d+' L '+points[points.length-1][0]+',155 L 22,155 Z';
+ svg.innerHTML='<line x1="18" x2="780" y1="'+y0+'" y2="'+y0+'" stroke="#50677a" stroke-dasharray="4 4"/>'+
+ '<path d="'+area+'" class="trend-fill"/><path d="'+d+'" class="trend-line"/>'+
+ '<text x="22" y="12" class="axis-text">'+pct(max)+'</text><text x="22" y="165" class="axis-text">'+pct(min)+'</text>';
+}
+function drawHistory(history){
+ var ar=history.slice(-7).reverse().map(function(x){
+  var b=x.best_net,cl=b==null?'dim':b>=0?'plus':'minus';
+  return '<li><span>'+time(x.timestamp)+'</span><span class="dim">'+Number(x.net_positive||0)+' плюсов</span><b class="'+cl+'">'+pct(b)+'</b></li>';
+ });
+ $('history').innerHTML=ar.join('')||'<li>Пока нет истории</li>';
+}
+async function refresh(){
+ try{
+  var r=await fetch('/api/reports',{credentials:'same-origin',cache:'no-store'});
+  if(r.status===401||r.redirected){location.href='/login';return;}
+  if(!r.ok)throw Error('HTTP '+r.status);
+  app.data=await r.json();app.failed=0;draw();
+ }catch(e){
+  app.failed++;if(app.failed>1){$('liveStatus').className='status bad';setText('liveStatus','● Нет связи');}
+ }
+}
+ document.querySelectorAll('.tab').forEach(function(btn){btn.addEventListener('click',function(){
+  app.tab=btn.getAttribute('data-tab');document.querySelectorAll('.tab').forEach(function(b){b.classList.toggle('active',b===btn);});if(app.data&&app.data.live)drawRows(app.data.live);
+ });});
+ ['query','venue','amount','risk'].forEach(function(id){$(id).addEventListener(id==='query'?'input':'change',function(){if(app.data&&app.data.live)drawRows(app.data.live);});});
+ refresh();setInterval(refresh,5000);
+})();
+</script></body></html>
