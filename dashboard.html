@@ -114,7 +114,7 @@ function drawRows(report){
   var ng=net==null?'dim':riskView?'dim':Number(net)>=0?'plus':'minus';
   var risk=x.asset_identity!=='CURATED_NATIVE';
   var badge=risk?'⚠ Тикер без подтверждения':'✓ Отобранный актив / сеть не проверена';
-  return '<tr><td class="pair">'+esc(x.pair)+'</td><td><span class="exchange">'+esc(x.buy)+'</span><span class="arrow">→</span><span class="exchange">'+esc(x.sell)+'</span></td><td class="num '+(gross>=0?'plus':'minus')+'">'+pct(gross)+'</td><td class="num '+ng+'">'+pct(net)+(net!=null?'<div class="dim" style="font-weight:400">'+money(x.estimated_net_usdt)+'</div>':'')+'</td><td>'+esc(x.model_amount_usdt==null?'без глубины':x.model_amount_usdt+' USDT')+'</td><td><span class="flag">'+badge+'</span></td></tr>';
+  return '<tr><td class="pair">'+esc(x.pair)+'</td><td><span class="exchange">'+esc(x.buy)+'</span><span class="arrow">→</span><span class="exchange">'+esc(x.sell)+'</span></td><td class="num '+(riskView?'dim':gross>=0?'plus':'minus')+'">'+pct(gross)+'</td><td class="num '+ng+'">'+pct(net)+(net!=null?'<div class="dim" style="font-weight:400">'+money(x.estimated_net_usdt)+'</div>':'')+'</td><td>'+esc(x.model_amount_usdt==null?'без глубины':x.model_amount_usdt+' USDT')+'</td><td><span class="flag">'+badge+'</span></td></tr>';
  });
  $('spreadRows').innerHTML=rows.join('')||'<tr><td colspan="6" class="empty">Под заданные фильтры подходящих маршрутов нет.</td></tr>';
  setText('tableNote',(app.tab==='scout'||app.tab==='anomalies')?'НЕПРОВЕРЕННЫЕ: совпадает только тикер. Могут быть РАЗНЫЕ ТОКЕНЫ. Все проценты условные, сигналы и сделки по ним отключены.':'Отобранные нативные активы. Глубина и комиссии моделируются; доступ к торговле и переводам НЕ подтверждён.');
