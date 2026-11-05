@@ -26,31 +26,44 @@ async def heartbeat(ws, message, every=25):
 async def listen_binance(symbols, send):
     # Public global feed: not evidence of Binance Kazakhstan executable liquidity.
     streams = '/'.join(f'{s.lower()}usdt@depth20@100ms' for s in symbols)
-    url = 'wss://stream.binance.com:9443/stream?streams=' + streams
-    async with websockets.connect(url, ping_interval=20, max_size=2**22) as ws:
+    # Official market-data-only host; do not use user/trading streams.
+    url = 'wss://data-stream.binance.vision:443/stream?streams=' + streams
+    async with websockets.connect(url, ping_interval=20, max_size=2**23) as ws:
+        supported=set(symbols)
         async for raw in ws:
             msg = json.loads(raw)
             data = msg.get('data', {})
             stream = msg.get('stream', '')
-            if 'bids' not in data:
+            if 'bids' not in data or 'asks' not in data or 'usdt@' not in stream:
                 continue
             symbol = stream.split('usdt@')[0].upper()
-            emit('binance_public', symbol, data['bids'], data['asks'], send)
+            if symbol in supported:
+                emit('binance_public', symbol, data['bids'], data['asks'], send)
 
 async def listen_bybit_kz(symbols, send):
     url = 'wss://stream.bybit.kz/v5/public/spot'
     snapshots = {}
-    async with websockets.connect(url, ping_interval=20, max_size=2**22) as ws:
-        await ws.send(json.dumps({'op':'subscribe','args':[f'orderbook.50.{s}USDT' for s in symbols]}))
+    async with websockets.connect(url, ping_interval=20, max_size=2**23) as ws:
+        async def subscribe():
+            # Small batches avoid oversized requests and keep reads unblocked.
+            for i in range(0,len(symbols),10):
+                await ws.send(json.dumps({'op':'subscribe',
+                    'args':[f'orderbook.50.{s}USDT' for s in symbols[i:i+10]]}))
+                await asyncio.sleep(0.25)
+        subscription=asyncio.create_task(subscribe())
         keepalive = asyncio.create_task(heartbeat(ws, json.dumps({'op':'ping'}), 20))
+        supported=set(symbols)
         try:
             async for raw in ws:
                 msg = json.loads(raw)
+                if msg.get('success') is False or msg.get('retCode',0) not in (0,None):
+                    LOG.warning('bybit_kz subscription/server error: %s',str(msg)[:350])
+                    continue
                 if not msg.get('topic', '').startswith('orderbook.50.'):
                     continue
                 d = msg.get('data') or {}
                 symbol = d.get('s','').removesuffix('USDT')
-                if symbol not in symbols:
+                if symbol not in supported:
                     continue
                 if msg.get('type') == 'snapshot':
                     snapshots[symbol] = {
@@ -77,7 +90,10 @@ async def listen_bybit_kz(symbols, send):
                 st = snapshots[symbol]
                 emit('bybit_kz', symbol, st['b'].items(), st['a'].items(), send)
         finally:
+            subscription.cancel()
             keepalive.cancel()
+            with suppress(asyncio.CancelledError):
+                await subscription
             with suppress(asyncio.CancelledError):
                 await keepalive
 
