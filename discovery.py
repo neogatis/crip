@@ -129,7 +129,7 @@ def select_universe(available, volume=None, max_pairs=100, min_exchanges=2,
     counts = Counter(s for symbols in available.values() for s in symbols)
     eligible = [s for s, count in counts.items() if count >= min_exchanges and safe_base(s)
                 and (scout_mode or resolve_asset(s) is not None)
-                and (s not in volume or volume[s] >= Decimal(str(min_gate_volume_usdt)))]
+                and (scout_mode or s not in volume or volume[s] >= Decimal(str(min_gate_volume_usdt)))]
     # Preference to high Gate-quoted 24h volume when reported; a preferred liquid
     # reference set breaks ties, but is not an assertion about live liquidity.
     preferred = {symbol:i for i,symbol in enumerate(PREFERRED)}
