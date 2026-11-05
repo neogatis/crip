@@ -20,6 +20,8 @@ def classify_route(buy: str, sell: str, pair: str) -> dict:
     region = 'GLOBAL_BINANCE_NOT_KZ' if 'binance_public' in (buy,sell) else (
         'AFSA_CAUTION_REVIEW' if caution else 'LICENSE_NOT_VERIFIED')
     details=identity_details(pair)
+    if details['identity_status'] == 'UNVERIFIED_EXCLUDED':
+        details['identity_status']='UNVERIFIED_SCOUT'
     return {
         'trade_readiness':'RESEARCH_ONLY',
         'kazakhstan_status':region,
