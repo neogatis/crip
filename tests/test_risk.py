@@ -1,5 +1,5 @@
 import unittest
-from risk import classify_route
+from risk import classify_route, is_known_collision
 
 class RiskClassificationTests(unittest.TestCase):
     def test_afsa_warning_route_research_only(self):
@@ -16,6 +16,12 @@ class RiskClassificationTests(unittest.TestCase):
     def test_unknown_ticker_requires_identity_verification(self):
         r=classify_route('gate','kraken','XYZQQ/USDT')
         self.assertEqual(r['asset_identity'],'TICKER_ONLY_REVIEW')
+
+    def test_definitive_is_not_edgex(self):
+        self.assertTrue(is_known_collision('gate','bitget','EDGE/USDT'))
+        self.assertTrue(is_known_collision('okx','gate','EDGE/USDT'))
+        self.assertFalse(is_known_collision('okx','bitget','EDGE/USDT'))
+        self.assertFalse(is_known_collision('gate','bitget','EDGEX/USDT'))
 
 if __name__=='__main__':
     unittest.main()
