@@ -84,8 +84,10 @@ async def listen_bybit_kz(symbols, send):
 async def listen_okx(symbols, send):
     url='wss://ws.okx.com:8443/ws/v5/public'
     async with websockets.connect(url, ping_interval=20, max_size=2**22) as ws:
-        await ws.send(json.dumps({'op':'subscribe','args':[
-            {'channel':'books5','instId':f'{s}-USDT'} for s in symbols]}))
+        for i in range(0,len(symbols),20):
+            await ws.send(json.dumps({'op':'subscribe','args':[
+                {'channel':'books5','instId':f'{s}-USDT'} for s in symbols[i:i+20]]}))
+            await asyncio.sleep(0.25)
         async for raw in ws:
             msg=json.loads(raw)
             if msg.get('arg',{}).get('channel')!='books5':
@@ -100,6 +102,7 @@ async def listen_gate(symbols, send):
         for symbol in symbols:
             await ws.send(json.dumps({'time':int(time.time()),'channel':'spot.order_book',
                 'event':'subscribe','payload':[f'{symbol}_USDT','20','100ms']}))
+            await asyncio.sleep(0.12)
         async for raw in ws:
             msg=json.loads(raw)
             if msg.get('channel')!='spot.order_book' or msg.get('event')!='update':
@@ -112,8 +115,10 @@ async def listen_gate(symbols, send):
 async def listen_bitget(symbols, send):
     url='wss://ws.bitget.com/v3/ws/public'
     async with websockets.connect(url, ping_interval=None, max_size=2**22) as ws:
-        await ws.send(json.dumps({'op':'subscribe','args':[
-            {'instType':'spot','topic':'books5','symbol':f'{s}USDT'} for s in symbols]}))
+        for i in range(0,len(symbols),20):
+            await ws.send(json.dumps({'op':'subscribe','args':[
+                {'instType':'spot','topic':'books5','symbol':f'{s}USDT'} for s in symbols[i:i+20]]}))
+            await asyncio.sleep(0.3)
         keepalive=asyncio.create_task(heartbeat(ws,'ping',25))
         try:
             async for raw in ws:
@@ -140,10 +145,15 @@ async def listen_kraken(symbols, send):
     url='wss://ws.kraken.com/v2'
     books={}
     async with websockets.connect(url, ping_interval=20, max_size=2**22) as ws:
-        await ws.send(json.dumps({'method':'subscribe',
-            'params':{'channel':'book','symbol':[f'{s}/USDT' for s in symbols], 'depth':10, 'snapshot':True}}))
+        for i in range(0,len(symbols),20):
+            await ws.send(json.dumps({'method':'subscribe',
+                'params':{'channel':'book','symbol':[f'{s}/USDT' for s in symbols[i:i+20]],
+                          'depth':10, 'snapshot':True}}))
+            await asyncio.sleep(0.4)
         async for raw in ws:
             msg=json.loads(raw)
+            if msg.get('success') is False:
+                LOG.warning('kraken subscription rejected: %s', msg.get('error', msg))
             if msg.get('channel')!='book':
                 continue
             for d in msg.get('data',[]):
@@ -151,6 +161,7 @@ async def listen_kraken(symbols, send):
                 if not pair.endswith('/USDT'):
                     continue
                 symbol=pair.split('/')[0]
+                if symbol == 'XBT': symbol = 'BTC'
                 if symbol not in symbols:
                     continue
                 if msg.get('type')=='snapshot' or symbol not in books:
