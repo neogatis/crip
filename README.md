@@ -1,29 +1,48 @@
-# S-Arbitrage MVP
+# S-Arbitrage — 0.3 Research Scanner
 
-Research-only cryptocurrency spot exchange spread scanner, **no private APIs, no trades, no transfers, and no funds at risk**.
+**Research-only cross-exchange spot USDT scanner**. Uses only public market data, no API keys, no wallet transfers, no real orders. This worker has no public dashboard.
 
-Tracks BTC/USDT, ETH/USDT and SOL/USDT public order books from Binance global, Bybit Kazakhstan, OKX, Bitget, Gate and Kraken. Global Binance data does not imply executable Binance Kazakhstan liquidity. All signals are RESEARCH_ONLY.
+## What it does
 
-## Railway deployment
-Build from Dockerfile. This is a worker, so it does not require a public HTTP domain. The default persistent database path is /data/signals.sqlite3; attach a Railway volume at /data before collecting production history. If Telegram credentials are absent, signals are logged to stdout and saved to SQLite.
+- Discovers active common USDT spot pairs across OKX, Bitget, Gate and Kraken (default target 100; capped at 300).
+- Subscribes to public order-book snapshots and checks 25/50 USDT simulated two-leg fills using full available depth.
+- Every 20 seconds logs a `SPREAD_REPORT` JSON object with three distinct leaderboards:
+  - `top_of_book_gross`: best ask vs best bid only. **No depth verification.**
+  - `top_depth_adjusted_gross`: simulated buy/sell weighted-average prices for a full 50-USDT trade.
+  - `top_estimated_net`: estimated profit after **assumed** buy+sell fees, uncertainty and rebalance reserves. Negative estimates are shown too.
+- Saves each report into `spread_reports` in persistent SQLite, and threshold alerts into `signals`.
+- Includes `kazakhstan_status` and `asset_identity` *caution* tags. **No route is marked executable.**
 
-Variables:
-- EXCHANGES=binance_public,bybit_kz,okx,bitget,gate,kraken
-- SYMBOLS=BTC,ETH,SOL
-- TRADE_AMOUNTS_USDT=25,50
-- MIN_NET_PCT=0.30
-- BOOK_MAX_AGE_MS=1500
-- SUSTAIN_SECONDS=1
-- ALERT_COOLDOWN_SECONDS=60
-- UNCERTAINTY_BPS=10
-- REBALANCE_BPS=10
-- SQLITE_PATH=/data/signals.sqlite3
-- TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are optional.
+## Railway worker
 
-Estimated proceeds and expenses come from public order-book depth and illustrative fee rates, not account data. Live streams have not been verified in the initial offline tests. Quote freshness is measured at receipt; full exchange sequence/checksum validation and fill simulation remain future tasks.
+Project `s-arbitrage`, service `s-arbitrage-scanner`. Attach a volume at `/data`, database path `/data/signals.sqlite3`.
 
-## Local tests
-`python -m unittest discover -s tests -v`
+Main variables:
+- `EXCHANGES=okx,bitget,gate,kraken`
+- `DYNAMIC_SYMBOLS=true`, `MAX_PAIRS=100` (can scale progressively, maximum 300)
+- `MIN_GATE_VOLUME_USDT=100000` (one exchange's 24h volume only; *not* an overall liquidity guarantee)
+- `TRADE_AMOUNTS_USDT=25,50`
+- `SCAN_INTERVAL_SECONDS=0.5`, `BOOK_MAX_AGE_MS=1500`
+- `MIN_NET_PCT=0.30`; `SUSTAIN_SECONDS=1`; `ALERT_COOLDOWN_SECONDS=60`
+- `FEE_BPS_JSON`: *illustrative*, **not actual account-tier fees**
+- `UNCERTAINTY_BPS=10`, `REBALANCE_BPS=10`
+- Telegram variables optional. Set secrets in Railway, **never in GitHub**.
 
-## Limitations
-Spot only. No money movement, buy/sell requests, wallet access, or real execution. Data from venues that may not be eligible for a Kazakhstan resident is **research only**. Before any future trading, check venue licensing, accessible markets, account fees, symbol limits, transfer status, taxes and inventory balancing.
+Use Railway -> Logs; filter `SPREAD_REPORT` and `HEALTH`.
+
+## IMPORTANT: compliance & reliability
+
+AFSA cautions about some globally available unlicensed digital-asset platforms including OKX and Bitget:
+https://afsa.aifc.kz/afsa-warning-on-unlicensed-digital-asset-platforms/
+https://afsa.aifc.kz/ru/frequently-asked-questions-faqs/
+
+A symbol shared across two exchanges **does not guarantee** that the underlying contract/token/network is identical. Even for commonly recognized tickers, check token identity. `LICENSE_NOT_VERIFIED` means not verified, **not** "allowed". `AFSA_CAUTION_REVIEW` flags caution requiring regulatory review. This app deliberately does not classify any route as permitted for Kazakhstan residents. Do not fund exchanges or trade on the basis of this research data.
+
+Every leaderboard is a **sample of the best observed readings during the latest 20-second window**, not a simultaneous cross-exchange executable order. WebSocket latency, sequence handling, clock skew, commissions, market impact, transfer rules, KYC, minimum sizes, volatility and inventory may invalidate any estimate. A positive estimate is not a prediction.
+
+## Tests
+
+```bash
+pip install -r requirements.txt
+python -m unittest discover -s tests -v
+```
