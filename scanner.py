@@ -12,6 +12,7 @@ from pathlib import Path
 import aiohttp
 
 from adapters import ADAPTERS, supervise
+from discovery import discover
 from engine import dec, estimate
 
 logging.basicConfig(level=os.environ.get('LOG_LEVEL','INFO').upper(),
@@ -73,6 +74,18 @@ async def run():
         raise ValueError(f'Unknown exchange adapters: {sorted(unknown)}')
     if not requested:
         raise ValueError('At least one exchange required')
+    dynamic=os.environ.get('DYNAMIC_SYMBOLS','true').lower() in ('true','1','yes')
+    venue_symbols={v:list(symbols) for v in requested}
+    if dynamic:
+        mapping,selected=await discover(requested,
+            max_pairs=int(os.environ.get('MAX_PAIRS','60')),
+            min_exchanges=2,
+            min_gate_volume_usdt=int(os.environ.get('MIN_GATE_VOLUME_USDT','0')))
+        if selected:
+            symbols=selected
+            venue_symbols={v:mapping.get(v,[]) for v in requested}
+        else:
+            LOG.warning('Discovery failed or no common pairs; keeping static safe fallback %s',symbols)
     amounts=[dec(x) for x in os.environ.get('TRADE_AMOUNTS_USDT','25,50').split(',')]
     fee_bps={**DEFAULT_FEES_BPS,**json.loads(os.environ.get('FEE_BPS_JSON','{}'))}
     min_net_pct=dec(os.environ.get('MIN_NET_PCT','0.30'))
@@ -97,7 +110,8 @@ async def run():
 
     LOG.info('Public-data scanner: %s; symbols: %s; amounts: %s',requested,symbols,amounts)
     LOG.warning('RESEARCH ONLY: No authenticated APIs, no account fees, no trading, no executable signals.')
-    tasks=[asyncio.create_task(supervise(name,symbols,send),name=name) for name in requested]
+    tasks=[asyncio.create_task(supervise(name,venue_symbols[name],send),name=name)
+           for name in requested if venue_symbols.get(name)]
     async with aiohttp.ClientSession() as session:
         try:
             while True:
