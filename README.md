@@ -1,4 +1,4 @@
-# S-Arbitrage — 0.5 Public-data Research Scanner
+# S-Arbitrage — 0.6 Dual-track Public-data Research Scanner
 
 **Spot USDT spread research, not a trading system.** No private keys, wallet transfers, signed APIs or order submission.
 
@@ -17,18 +17,18 @@ Public spot order books from:
 
 Public spot market catalogs are discovered from each venue's REST endpoint; only actively trading USDT spot markets are subscribed to. A working WebSocket feed does **not** imply users in Kazakhstan are eligible to trade.
 
-## Asset identity: strict fail-closed mode
+## Identity & broad scout mode (dual_track_scout_v2)
 
-Set by `identity.py`: `curated_native_fail_closed_v1`.
+**We monitor broadly without treating ticker equality as identity verification.**
 
-1. The pair must be listed as active spot USDT on at least two independent exchanges.
-2. The base asset must be an explicitly curated **native-chain asset** with a canonical asset ID and named home blockchain (e.g., BTC = Bitcoin, ETH = Ethereum, STX = Stacks). It is NOT enough for two tickers to match.
-3. **All tokens outside this registry are excluded entirely** from comparison, alerts and current dashboard reports. Known collisions EDGE (Definitive/edgeX) and UP cannot appear.
-4. Smarter contract tokens can be added later only after both exchanges expose independently verifiable network + contract addresses that match. There is **no automatic smart-contract verification yet**. Do not silently whitelist token tickers.
-5. The explicit native registry is a conservative identity control; it does **not** prove an exchange's deposit/withdraw network, account-specific availability or actual trading legitimacy. This is marked `transfer_network_verified=false` in every record.
-6. Previous SQLite history is retained for audit; pre-registry snapshots are **hidden** from the current dashboard.
+1. Dynamic discovery selects up to 200 USDT spot tickers listed on at least two exchanges. Curated native assets (BTC, ETH, STX etc) get first priority, then higher-volume market candidates. A low Gate volume alone does not exclude an otherwise listed scout candidate.
+2. **Отобранные**: a conservative curated *native-asset* registry provides a canonical asset ID. These routes receive full depth estimates and threshold research alerts. Even here, exchange-by-exchange deposits, networks, fees and account access are NOT verified.
+3. **Кандидаты**: all other overlapping tickers (PEPE, LINK, SHIB and many more) are visible with depth-adjusted hypothetical estimates, but **never generate trade/profit alerts** because token identity is unconfirmed.
+4. **Аномалии**: candidate gross spreads ≥10% are displayed in a separate area. High differences often represent different assets or invalid quotes, **not windfall profit**. Known proven ticker collisions (e.g. Gate Definitive EDGE vs OKX/Bitget edgeX EDGE) are blocked entirely.
+5. A token can move into a trusted category only after the **same chain + token contract** is confirmed from both exchanges' independent metadata, or by a reviewed mapping. That automatic cross-venue contract comparison is still **not implemented**; public metadata differs by exchange. Gate does expose chains and contract addresses through `GET /spot/currencies`, but not every venue has equivalent unauthenticated metadata.
+6. All data are strictly research-only. Real exchange eligibility in Kazakhstan, networks, transfers and fees are not checked.
 
-This deliberately reduces coverage from ~190 same-ticker pairs to ~29 known native assets. No false claims of a 200-coin verified universe.
+Historical reports remain in SQLite; old runs from different identity regimes are hidden from the current live dashboard but retained for audit.
 
 ## Railway
 
@@ -37,8 +37,8 @@ Project `s-arbitrage`; service `s-arbitrage-scanner`, deployment region Netherla
 Environment:
 - `EXCHANGES=okx,bitget,gate,kraken,binance_public,bybit_kz`
 - `DYNAMIC_SYMBOLS=true`
-- `MAX_PAIRS=200` (upper bound, **not** the effective count)
-- `MIN_GATE_VOLUME_USDT=100000`
+- `MAX_PAIRS=200` (target upper bound; active catalogs and subscription limits determine actual coverage)
+- `MIN_GATE_VOLUME_USDT=100000` (ignored as an exclusion in scout mode; used for ranking)
 - `TRADE_AMOUNTS_USDT=25,50`, `SCAN_INTERVAL_SECONDS=0.5`
 - `BOOK_MAX_AGE_MS=1500`, `MIN_NET_PCT=0.30`, `SUSTAIN_SECONDS=1`
 - `UNCERTAINTY_BPS=10`, `REBALANCE_BPS=10`
