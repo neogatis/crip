@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 from aiohttp import web
+from identity import IDENTITY_MODE
 
 LOG = logging.getLogger('sarb.dashboard')
 COOKIE = 'sarb_session'
@@ -107,7 +108,9 @@ def read_reports(db_path):
     for (text,) in reversed(rows):
         try:
             obj=json.loads(text)
-            if isinstance(obj,dict):
+            # Pre-registry reports compared unrelated coins with matching tickers.
+            # Preserve them on disk for audit but never show as current opportunities.
+            if isinstance(obj,dict) and obj.get('identity_mode') == IDENTITY_MODE:
                 reports.append(obj)
         except (json.JSONDecodeError,TypeError):
             pass
@@ -120,6 +123,7 @@ async def api(req):
     latest=reports[-1] if reports else None
     output={
         'mode':'RESEARCH_ONLY',
+        'identity_mode':IDENTITY_MODE,
         'live':latest,
         'history':[{
             'timestamp':r.get('timestamp'),
