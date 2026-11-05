@@ -33,3 +33,14 @@ def classify_route(buy: str, sell: str, pair: str) -> dict:
         "balances_verified": False,
         "execution_enabled": False,
     }
+
+# Source-verified ticker collision: Gate EDGE/USDT is Definitive EDGE on Base;
+# Bitget/OKX EDGE/USDT is edgeX EDGE on Ethereum.
+# https://www.definitive.fi/blog/definitive-edge-is-live
+# https://www.gate.com/ru/announcements/article/50464
+# https://www.okx.com/en-eu/help/okx-to-list-edge-edgex-for-spot-trading
+# https://www.bitget.com/blog/articles/bitget-lists-edgex-edge-spot-trading-innovation-zone
+def is_known_collision(buy: str, sell: str, pair: str) -> bool:
+    return (pair.upper() == 'EDGE/USDT' and
+            'gate' in (buy, sell) and
+            ('bitget' in (buy, sell) or 'okx' in (buy, sell)))
