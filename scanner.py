@@ -15,6 +15,7 @@ from adapters import ADAPTERS, supervise
 from discovery import discover
 from engine import dec, estimate
 from risk import classify_route
+from connectivity_probe import run_probes
 
 logging.basicConfig(level=os.environ.get('LOG_LEVEL','INFO').upper(),
                     format='%(asctime)s %(levelname)s %(name)s %(message)s')
@@ -183,6 +184,7 @@ async def run():
     tasks=[asyncio.create_task(supervise(name,venue_symbols[name],send),name=name)
            for name in requested if venue_symbols.get(name)]
     tasks.append(asyncio.create_task(report_diagnostics(),name='market-data-health'))
+    tasks.append(asyncio.create_task(run_probes(),name='regional-exchange-probes'))
     async with aiohttp.ClientSession() as session:
         try:
             # Best gross/net snapshots are diagnostic, not executable opportunities.
