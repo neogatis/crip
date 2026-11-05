@@ -14,6 +14,7 @@ import aiohttp
 from adapters import ADAPTERS, supervise
 from discovery import discover
 from engine import dec, estimate
+from risk import classify_route
 
 logging.basicConfig(level=os.environ.get('LOG_LEVEL','INFO').upper(),
                     format='%(asctime)s %(levelname)s %(name)s %(message)s')
@@ -38,6 +39,14 @@ class Store:
             amount_usdt TEXT NOT NULL, net_usdt TEXT NOT NULL,
             net_pct TEXT NOT NULL, gross_pct TEXT NOT NULL,
             status TEXT NOT NULL, costs_json TEXT NOT NULL)""")
+        self.db.execute("""CREATE TABLE IF NOT EXISTS spread_reports (
+            id INTEGER PRIMARY KEY, occurred_at TEXT NOT NULL,
+            data_json TEXT NOT NULL)""")
+        self.db.commit()
+
+    def save_spread_report(self, payload):
+        self.db.execute("INSERT INTO spread_reports (occurred_at, data_json) VALUES (?,?)",
+            (datetime.now(timezone.utc).isoformat(), json.dumps(payload)))
         self.db.commit()
 
     def save(self, e, status):
@@ -102,7 +111,9 @@ async def run():
     first_seen={}
     last_alert=defaultdict(lambda:0)
     last_scan=defaultdict(lambda:0)
+    scan_interval=float(os.environ.get('SCAN_INTERVAL_SECONDS','0.5'))
     observed_spreads={}
+    observed_raw={}
     evaluated_candidates=0
 
     def send(book):
@@ -125,21 +136,46 @@ async def run():
                     fresh[b.exchange]+=1
             LOG.info('HEALTH market-data updates=%s; fresh-books=%s; queue=%d',
                      dict(feed_counters),dict(fresh),queue.qsize())
-            if observed_spreads:
-                highest_net=sorted(observed_spreads.values(),
-                    key=lambda r:r['net_pct'],reverse=True)[:5]
-                best_gross=max(observed_spreads.values(),key=lambda r:r['gross_spread_pct'])
-                def describe(r):
-                    return (f"{r['symbol']} {r['buy']}->{r['sell']}: "
-                            f"gross={r['gross_spread_pct']:.3f}%, "
-                            f"net={r['net_pct']:.3f}%, "
-                            f"50USDT est-net={r['net_usdt']:.4f}")
-                LOG.info('SPREAD_SNAPSHOT evaluated=%d top_net=%s best_gross=%s',
-                         evaluated_candidates,
-                         [describe(r) for r in highest_net],describe(best_gross))
-            else:
-                LOG.warning('SPREAD_SNAPSHOT no sufficiently deep simultaneous cross-venue books')
+            # Raw best-bid/best-ask gaps are displayed separately because they
+            # may not have enough depth to fill even the model's 50-USDT order.
+            def build_entry(r):
+                return {
+                    'pair':r['symbol'],'buy':r['buy'],'sell':r['sell'],
+                    'gross_pct':round(float(r['gross_spread_pct']),5),
+                    'estimated_net_pct':round(float(r['net_pct']),5),
+                    'estimated_net_usdt':round(float(r['net_usdt']),5),
+                    'model_amount_usdt':round(float(r['quote_budget']),2),
+                    **classify_route(r['buy'],r['sell'],r['symbol']),
+                }
+            snapshots=list(observed_spreads.values())
+            ranked_gross=sorted(snapshots,key=lambda r:r['gross_spread_pct'],reverse=True)
+            ranked_net=sorted(snapshots,key=lambda r:r['net_pct'],reverse=True)
+            ranked_raw=sorted(observed_raw.values(),key=lambda r:r['raw_gross_pct'],reverse=True)
+            raw_top=[
+                {'pair':r['symbol'],'buy':r['buy'],'sell':r['sell'],
+                 'top_of_book_gross_pct':round(float(r['raw_gross_pct']),5),
+                 'depth_checked':False,
+                 **classify_route(r['buy'],r['sell'],r['symbol'])}
+                for r in ranked_raw[:5]
+            ]
+            payload={
+                'type':'SPREAD_REPORT','timestamp':datetime.now(timezone.utc).isoformat(),
+                'mode':'RESEARCH_ONLY','universe_count':len(symbols),
+                'live_books_by_venue':dict(fresh),
+                'evaluations':evaluated_candidates,
+                'depth_qualified_routes':len(snapshots),
+                'gross_positive':sum(r['gross_spread_pct']>0 for r in snapshots),
+                'net_positive':sum(r['net_pct']>0 for r in snapshots),
+                'net_above_signal_threshold':sum(r['net_pct']>=min_net_pct for r in snapshots),
+                'top_of_book_gross':raw_top,
+                'top_depth_adjusted_gross':[build_entry(r) for r in ranked_gross[:5]],
+                'top_estimated_net':[build_entry(r) for r in ranked_net[:5]],
+                'note':'Historical best within latest 20s, not simultaneous snapshots or executable quotes; fees assumed and asset identities unverified.',
+            }
+            LOG.info('SPREAD_REPORT %s',json.dumps(payload,ensure_ascii=False,separators=(',',':')))
+            store.save_spread_report(payload)
             observed_spreads.clear()
+            observed_raw.clear()
             evaluated_candidates=0
             if not fresh:
                 LOG.warning('HEALTH no fresh order books; spread absence cannot be established')
@@ -154,7 +190,7 @@ async def run():
                 book=await queue.get()
                 books[(book.exchange,book.symbol)]=book
                 now=time.monotonic()
-                if now-last_scan[book.symbol]<0.25:
+                if now-last_scan[book.symbol]<scan_interval:
                     continue
                 last_scan[book.symbol]=now
                 current=[b for (venue,sym),b in books.items()
@@ -164,6 +200,17 @@ async def run():
                     for sell in current:
                         if buy.exchange==sell.exchange:
                             continue
+                        if buy.asks and sell.bids and buy.asks[0][0]>0:
+                            top_buy=buy.asks[0][0]
+                            top_sell=sell.bids[0][0]
+                            raw_gap=(top_sell/top_buy-dec(1))*dec(100)
+                            raw_key=(buy.exchange,sell.exchange,book.symbol)
+                            prev_raw=observed_raw.get(raw_key)
+                            if prev_raw is None or raw_gap>prev_raw['raw_gross_pct']:
+                                observed_raw[raw_key]={
+                                    'symbol':book.symbol,'buy':buy.exchange,
+                                    'sell':sell.exchange,'raw_gross_pct':raw_gap,
+                                }
                         for amount in amounts:
                             key=(buy.exchange,sell.exchange,book.symbol,str(amount))
                             r=estimate(buy,sell,amount,
