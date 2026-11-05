@@ -102,6 +102,8 @@ async def run():
     first_seen={}
     last_alert=defaultdict(lambda:0)
     last_scan=defaultdict(lambda:0)
+    observed_spreads={}
+    evaluated_candidates=0
 
     def send(book):
         feed_counters[book.exchange]+=1
@@ -113,6 +115,7 @@ async def run():
     LOG.info('Public-data scanner: %s; symbols: %s; amounts: %s',requested,symbols,amounts)
     LOG.warning('RESEARCH ONLY: No authenticated APIs, no account fees, no trading, no executable signals.')
     async def report_diagnostics():
+        nonlocal evaluated_candidates
         while True:
             await asyncio.sleep(20)
             now=time.monotonic()
@@ -122,6 +125,22 @@ async def run():
                     fresh[b.exchange]+=1
             LOG.info('HEALTH market-data updates=%s; fresh-books=%s; queue=%d',
                      dict(feed_counters),dict(fresh),queue.qsize())
+            if observed_spreads:
+                highest_net=sorted(observed_spreads.values(),
+                    key=lambda r:r['net_pct'],reverse=True)[:5]
+                best_gross=max(observed_spreads.values(),key=lambda r:r['gross_spread_pct'])
+                def describe(r):
+                    return (f"{r['symbol']} {r['buy']}->{r['sell']}: "
+                            f"gross={r['gross_spread_pct']:.3f}%, "
+                            f"net={r['net_pct']:.3f}%, "
+                            f"50USDT est-net={r['net_usdt']:.4f}")
+                LOG.info('SPREAD_SNAPSHOT evaluated=%d top_net=%s best_gross=%s',
+                         evaluated_candidates,
+                         [describe(r) for r in highest_net],describe(best_gross))
+            else:
+                LOG.warning('SPREAD_SNAPSHOT no sufficiently deep simultaneous cross-venue books')
+            observed_spreads.clear()
+            evaluated_candidates=0
             if not fresh:
                 LOG.warning('HEALTH no fresh order books; spread absence cannot be established')
 
@@ -130,6 +149,7 @@ async def run():
     tasks.append(asyncio.create_task(report_diagnostics(),name='market-data-health'))
     async with aiohttp.ClientSession() as session:
         try:
+            # Best gross/net snapshots are diagnostic, not executable opportunities.
             while True:
                 book=await queue.get()
                 books[(book.exchange,book.symbol)]=book
@@ -149,6 +169,11 @@ async def run():
                             r=estimate(buy,sell,amount,
                                 fee_bps[buy.exchange],fee_bps[sell.exchange],
                                 slippage_bps,rebalance_bps)
+                            if r is not None and amount == dec(50):
+                                evaluated_candidates+=1
+                                existing=observed_spreads.get(key)
+                                if existing is None or r['net_pct']>existing['net_pct']:
+                                    observed_spreads[key]=r
                             if r is None or r['net_pct'] < min_net_pct:
                                 first_seen.pop(key,None)
                                 continue
