@@ -97,12 +97,14 @@ async def run():
     database=os.environ.get('SQLITE_PATH','./data/signals.sqlite3')
     store=Store(database)
     books={}
+    feed_counters=defaultdict(int)
     queue=asyncio.Queue(maxsize=20000)
     first_seen={}
     last_alert=defaultdict(lambda:0)
     last_scan=defaultdict(lambda:0)
 
     def send(book):
+        feed_counters[book.exchange]+=1
         if queue.full():
             try: queue.get_nowait()
             except asyncio.QueueEmpty: pass
@@ -110,8 +112,22 @@ async def run():
 
     LOG.info('Public-data scanner: %s; symbols: %s; amounts: %s',requested,symbols,amounts)
     LOG.warning('RESEARCH ONLY: No authenticated APIs, no account fees, no trading, no executable signals.')
+    async def report_diagnostics():
+        while True:
+            await asyncio.sleep(20)
+            now=time.monotonic()
+            fresh=defaultdict(int)
+            for b in books.values():
+                if (now-b.received_at)*1000 <= book_max_age_ms:
+                    fresh[b.exchange]+=1
+            LOG.info('HEALTH market-data updates=%s; fresh-books=%s; queue=%d',
+                     dict(feed_counters),dict(fresh),queue.qsize())
+            if not fresh:
+                LOG.warning('HEALTH no fresh order books; spread absence cannot be established')
+
     tasks=[asyncio.create_task(supervise(name,venue_symbols[name],send),name=name)
            for name in requested if venue_symbols.get(name)]
+    tasks.append(asyncio.create_task(report_diagnostics(),name='market-data-health'))
     async with aiohttp.ClientSession() as session:
         try:
             while True:
