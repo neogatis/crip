@@ -15,6 +15,7 @@ from adapters import ADAPTERS, supervise
 from discovery import discover
 from engine import dec, estimate
 from risk import classify_route, is_known_collision
+from identity import IDENTITY_MODE, same_asset
 from connectivity_probe import run_probes
 from dashboard import run_dashboard
 
@@ -96,7 +97,7 @@ async def run():
             symbols=selected
             venue_symbols={v:mapping.get(v,[]) for v in requested}
         else:
-            LOG.warning('Discovery failed or no common pairs; keeping static safe fallback %s',symbols)
+            raise RuntimeError('No verified common native asset listings; fail closed (no ticker-only fallback)')
     amounts=[dec(x) for x in os.environ.get('TRADE_AMOUNTS_USDT','25,50').split(',')]
     fee_bps={**DEFAULT_FEES_BPS,**json.loads(os.environ.get('FEE_BPS_JSON','{}'))}
     min_net_pct=dec(os.environ.get('MIN_NET_PCT','0.30'))
@@ -125,7 +126,7 @@ async def run():
             except asyncio.QueueEmpty: pass
         queue.put_nowait(book)
 
-    LOG.info('Public-data scanner: %s; symbols: %s; amounts: %s',requested,symbols,amounts)
+    LOG.info('Public-data scanner: %s; symbols: %s; amounts: %s; identity=%s',requested,symbols,amounts,IDENTITY_MODE)
     LOG.warning('RESEARCH ONLY: No authenticated APIs, no account fees, no trading, no executable signals.')
     async def report_diagnostics():
         nonlocal evaluated_candidates
@@ -162,7 +163,8 @@ async def run():
             ]
             payload={
                 'type':'SPREAD_REPORT','timestamp':datetime.now(timezone.utc).isoformat(),
-                'mode':'RESEARCH_ONLY','universe_count':len(symbols),
+                'mode':'RESEARCH_ONLY','identity_mode':IDENTITY_MODE,
+                'universe_count':len(symbols),
                 'live_books_by_venue':dict(fresh),
                 'evaluations':evaluated_candidates,
                 'depth_qualified_routes':len(snapshots),
@@ -174,7 +176,7 @@ async def run():
                 'top_estimated_net':[build_entry(r) for r in ranked_net[:5]],
                 'routes':[build_entry(r) for r in ranked_net[:120]],
                 'gross_routes':[build_entry(r) for r in ranked_gross[:75]],
-                'note':'Historical best within latest 20s, not simultaneous snapshots or executable quotes; fees assumed and asset identities unverified.',
+                'note':'Native assets from manually curated canonical registry; network/chain support, account fees and KZ trading eligibility UNVERIFIED; best observations over 20s.',
             }
             # Persist expanded rankings for the UI, but keep Railway logs compact.
             brief={k:v for k,v in payload.items() if k not in ('routes','gross_routes')}
@@ -206,7 +208,8 @@ async def run():
                 active=set()
                 for buy in current:
                     for sell in current:
-                        if buy.exchange==sell.exchange or is_known_collision(buy.exchange,sell.exchange,book.symbol):
+                        if (not same_asset(buy.exchange,sell.exchange,book.symbol)
+                                or is_known_collision(buy.exchange,sell.exchange,book.symbol)):
                             continue
                         if buy.asks and sell.bids and buy.asks[0][0]>0:
                             top_buy=buy.asks[0][0]
