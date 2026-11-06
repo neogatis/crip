@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ru"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>S-Scalp · Paper Terminal</title>
+<style>
+:root{color-scheme:dark;--bg:#07101d;--panel:#101d2c;--edge:#23334a;--muted:#91a4bd;--text:#ecf5ff;--green:#55e0b8;--red:#ff778a;--yellow:#eccf78}
+*{box-sizing:border-box}body{background:radial-gradient(ellipse at top right,#17283c 0%,var(--bg) 58%);color:var(--text);font:14px system-ui,-apple-system,Segoe UI,sans-serif;margin:0;min-height:100vh}
+main{max-width:1440px;padding:26px 22px 60px;margin:auto}header{display:flex;justify-content:space-between;align-items:center;gap:15px;flex-wrap:wrap}
+.brand{font-weight:900;letter-spacing:.11em;font-size:23px}.brand span{color:var(--green)}.sub{color:var(--muted);font-size:12px;margin-top:5px}.tag{background:#10352e;color:var(--green);border:1px solid #1c6958;padding:7px 12px;border-radius:99px;font-weight:800;font-size:11px}
+.header-right{display:flex;gap:12px;align-items:center}button{color:#cbd8e9;background:#1a2b42;border:1px solid var(--edge);border-radius:8px;padding:8px 12px;cursor:pointer}
+.alert{background:#2b2413;color:#f1d991;border:1px solid #574725;padding:11px 15px;border-radius:11px;margin-top:24px;font-size:13px}
+.stats{display:grid;grid-template-columns:repeat(5,minmax(130px,1fr));gap:12px;margin:19px 0}
+.card,.panel{background:linear-gradient(155deg,#111f31,#0e1b29);border:1px solid var(--edge);border-radius:14px}
+.card{padding:18px}.card .label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em}.big{font-size:25px;font-weight:850;margin-top:10px;font-variant-numeric:tabular-nums}.small{color:var(--muted);font-size:11px;margin-top:6px}
+.grid{display:grid;grid-template-columns:1.45fr 1fr;gap:16px}.panel{padding:19px;min-width:0}.panel h2{font-size:15px;margin:0 0 16px;display:flex;justify-content:space-between;align-items:center;letter-spacing:.01em}.panel h2 small{font-size:11px;font-weight:400;color:var(--muted)}
+table{width:100%;border-collapse:collapse;white-space:nowrap;font-variant-numeric:tabular-nums}th{font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600;text-align:left;padding:10px 8px;border-bottom:1px solid var(--edge)}td{padding:12px 8px;border-bottom:1px solid #203047;font-size:12px}td:last-child,th:last-child{text-align:right}tr:last-child td{border-bottom:0}
+.scroll{overflow-x:auto}.muted{color:var(--muted)}.up{color:var(--green)}.down{color:var(--red)}.mono{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+.chip{display:inline-block;background:#18334a;border-radius:5px;padding:3px 5px;font-size:10px}.signal{border-left:2px solid var(--green);padding:9px 12px;background:#12263b;margin:8px 0;border-radius:0 7px 7px 0}.signal.close{border-left-color:var(--yellow)}.signal .time{color:var(--muted);font-size:11px}
+.feed{display:flex;gap:10px;align-items:center;margin:9px 0;color:var(--muted);font-size:12px}.dot{width:9px;height:9px;background:var(--red);border-radius:100%;display:inline-block}.dot.ok{background:var(--green)}.dim{opacity:.75}
+footer{margin-top:24px;color:var(--muted);font-size:12px;line-height:1.6}
+@media(max-width:1100px){.stats{grid-template-columns:repeat(3,1fr)}.grid{grid-template-columns:1fr}}
+@media(max-width:570px){main{padding:17px 11px}.stats{grid-template-columns:repeat(2,1fr);gap:8px}.card{padding:13px}.big{font-size:21px}.panel{padding:14px}.brand{font-size:20px}.alert{font-size:12px}}
+</style></head><body><main>
+<header><div><div class="brand">S <span>/</span> SCALP</div><div class="sub">Spot Momentum Scanner · Research Terminal v0.1</div></div><div class="header-right"><span class="tag">● PAPER TRADING ONLY</span><form method="post" action="/logout"><button type="submit">Выйти</button></form></div></header>
+<div class="alert">Только симуляция. Котировки реальны, исполнение виртуальное. Комиссии и проскальзывание заданы моделью, а не подтверждены биржей. Прибыль не гарантирована.</div>
+<section class="stats">
+<div class="card"><div class="label">Оценка капитала</div><div class="big" id="equity">—</div><div class="small">Свободные средства + оценка позиций</div></div>
+<div class="card"><div class="label">Результат всего</div><div class="big" id="pnl">—</div><div class="small">Реализованная прибыль/убыток</div></div>
+<div class="card"><div class="label">Результат за день</div><div class="big" id="daily">—</div><div class="small">UTC · лимит потерь 10 USDT</div></div>
+<div class="card"><div class="label">Закрытых сделок</div><div class="big" id="trades">—</div><div class="small" id="winrate">Win rate: —</div></div>
+<div class="card"><div class="label">Открытых позиций</div><div class="big" id="positions">—</div><div class="small">Не более 2 одновременно</div></div>
+</section>
+<div class="grid">
+<section class="panel"><h2>Рынок <small>Live order book · данные при наличии соединения</small></h2><div class="scroll"><table><thead><tr><th>Биржа</th><th>Монета</th><th>Bid</th><th>Ask</th><th>Спред</th><th>Возраст</th></tr></thead><tbody id="quotes"><tr><td colspan="6" class="muted">Подключаем поток...</td></tr></tbody></table></div></section>
+<section class="panel"><h2>Потоки данных <small id="lastSync">—</small></h2><div id="feeds" class="muted">Ожидаем соединения...</div><div style="margin-top:20px" class="muted">Логика: импульс ≥0,30% за 20 сек, доля рыночных покупок ≥60%, минимум 12 принтов, свежий стакан и спред ≤0,08%. Все величины — стартовые гипотезы.</div></section>
+<section class="panel"><h2>Открытые виртуальные позиции <small>Оценка после издержек</small></h2><div class="scroll"><table><thead><tr><th>Монета</th><th>Биржа</th><th>Вход</th><th>Объём</th><th>Нереализ. P&amp;L</th></tr></thead><tbody id="open"><tr><td colspan="5" class="muted">Пока нет позиций</td></tr></tbody></table></div></section>
+<section class="panel"><h2>Последние события <small>Paper signals</small></h2><div id="events" class="muted">Сигналов пока нет</div></section>
+<section class="panel" style="grid-column:1/-1"><h2>История виртуальных сделок <small>Включая комиссии и модельное проскальзывание</small></h2><div class="scroll"><table><thead><tr><th>Время UTC</th><th>Пара</th><th>Биржа</th><th>Покупка</th><th>Продажа</th><th>Причина</th><th>P&amp;L, USDT</th></tr></thead><tbody id="history"><tr><td colspan="7" class="muted">История пока пустая</td></tr></tbody></table></div></section>
+</div><footer>Режим PAPER_ONLY жёстко задан в сервере: нет клиентских ключей, отправки ордеров, плеча и фьючерсов. Данные бирж общедоступные и не подтверждают наличие торгового доступа в вашей стране. Оценка equity недостоверна при устаревших котировках.</footer>
+</main>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const safe=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const money=n=>Number.isFinite(Number(n))?Number(n).toFixed(3)+" USDT":"—";
+const num=(n,d=2)=>Number.isFinite(Number(n))?Number(n).toFixed(d):"—";
+const signed=n=>Number(n)>0?"up":Number(n)<0?"down":"";
+const utc=t=>t?new Date(t*1000).toLocaleTimeString("ru-RU",{timeZone:"UTC",hour12:false})+" UTC":"—";
+function empty(t,colspan){return '<tr><td colspan="'+colspan+'" class="muted">'+safe(t)+'</td></tr>';}
+async function refresh(){
+ try{
+  const response=await fetch("/api/status",{cache:"no-store"});
+  if(response.status===401){location.href="/login";return;}
+  if(!response.ok)throw new Error("HTTP "+response.status);
+  const s=await response.json();
+  $("equity").textContent=money(s.equity_estimate);
+  $("pnl").textContent=money(s.realized_total);$("pnl").className="big "+signed(s.realized_total);
+  $("daily").textContent=money(s.daily_realized);$("daily").className="big "+signed(s.daily_realized);
+  $("trades").textContent=s.closed_trades;
+  $("winrate").textContent="Win rate: "+num(s.win_rate)+"%";
+  $("positions").textContent=s.positions.length+" / 2";
+  $("lastSync").textContent="Обновлено "+utc(s.updated_at);
+  $("feeds").innerHTML=Object.entries(s.feeds).map(([name,f])=>{
+   const fresh=f.connected&&f.last_message&&(s.updated_at-f.last_message<30);
+   return '<div class="feed"><span class="dot '+(fresh?"ok":"")+'"></span><b>'+safe(name)+'</b><span>'+safe(fresh?"активен":"нет свежих данных")+'</span></div>'+(f.error?'<div class="muted" style="font-size:11px">'+safe(f.error)+'</div>':"");
+  }).join("");
+  $("quotes").innerHTML=s.quotes.length?s.quotes.map(q=>
+   '<tr><td><span class="chip">'+safe(q.venue)+'</span></td><td><b>'+safe(q.symbol)+'</b></td><td>'+num(q.bid,6)+'</td><td>'+num(q.ask,6)+'</td><td>'+num(q.spread_pct,3)+'%</td><td class="'+(q.age_seconds>2.5?"down":"")+'">'+num(q.age_seconds,1)+' c</td></tr>'
+  ).join(""):empty("Данные пока не поступили",6);
+  $("open").innerHTML=s.positions.length?s.positions.map(p=>
+   '<tr><td><b>'+safe(p.symbol)+'</b></td><td>'+safe(p.venue)+'</td><td>'+num(p.entry_price,6)+'</td><td>'+money(p.notional)+'</td><td class="'+signed(p.paper_pnl)+'">'+(p.quote_fresh?money(p.paper_pnl):"Стакан устарел")+'</td></tr>'
+  ).join(""):empty("Открытых позиций нет",5);
+  $("history").innerHTML=s.trades.length?s.trades.map(t=>
+   '<tr><td>'+utc(t.closed_at)+'</td><td>'+safe(t.symbol)+'</td><td>'+safe(t.venue)+'</td><td>'+num(t.entry_price,6)+'</td><td>'+num(t.exit_price,6)+'</td><td>'+safe(t.reason)+'</td><td class="'+signed(t.pnl)+'">'+money(t.pnl)+'</td></tr>'
+  ).join(""):empty("Сделок пока нет",7);
+  $("events").innerHTML=s.events.length?s.events.slice(0,8).map(e=>
+   '<div class="signal '+(e.type==="CLOSE"?"close":"")+'"><div><b>'+safe(e.type)+'</b> · '+safe(e.symbol)+' <span class="time">'+utc(e.at)+'</span></div><div class="muted">'+safe(e.detail)+'</div></div>'
+  ).join(""):"Событий пока нет";
+ }catch(e){$("lastSync").textContent="Ошибка обновления: "+e.message;}
+}
+refresh();setInterval(refresh,3000);
+</script></body></html>
