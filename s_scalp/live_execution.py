@@ -6,6 +6,7 @@ are all provided by the operator. Never enable before exchange verification.
 
 Acknowledgement != fill. Any uncertain request PAUSES until manual review.
 """
+import asyncio
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_DOWN, ROUND_UP, InvalidOperation
 import hashlib
@@ -181,6 +182,7 @@ class GuardedExecution:
     def __init__(self, client, journal_path, guardrails=None, live_enabled=False,
                  acknowledged_risk=False):
         self.client = client
+        self._attempt_lock = asyncio.Lock()
         self.risk = guardrails or Guardrails()
         self.live_enabled = bool(live_enabled)
         self.acknowledged_risk = bool(acknowledged_risk)
@@ -216,6 +218,10 @@ class GuardedExecution:
         }
 
     async def preview_or_submit(self, symbol, quote, *, observed_at, now=None):
+        async with self._attempt_lock:
+            return await self._preview_or_submit_locked(symbol, quote, observed_at=observed_at, now=now)
+
+    async def _preview_or_submit_locked(self, symbol, quote, *, observed_at, now=None):
         now = time.time() if now is None else now
         if not self.ready():
             raise ExecutionDisabled("Real order trading is disabled")
@@ -228,7 +234,9 @@ class GuardedExecution:
             raise ExecutionDisabled("Bad quote / spread too wide")
         # Only the Kazakhstan service can execute a Kazakhstan order;
         # mixed venue quotes or Binance Global signals are never accepted.
-        if quote.get("venue") != "bybit_kz" or self.client.base != KZ_API:
+        expected_venue = "bybit_kz" if self.client.base == KZ_API else (
+            "bybit_testnet" if self.client.base == TEST_API else None)
+        if quote.get("venue") != expected_venue or expected_venue is None:
             raise ExecutionDisabled("Venue mismatch / unsupported live market")
         # Fresh *independent* Bybit Kazakhstan REST ticker must agree with stream.
         venue_quote = await self.client.ticker(symbol)
