@@ -104,6 +104,8 @@ class BinanceSpotClient:
             ordered.append(("signature", hmac_signature(self.secret, ordered)))
         body = urlencode(ordered)
         headers = {"X-MBX-APIKEY": self.key} if private else {}
+        if method != "GET":
+            headers["Content-Type"] = "application/x-www-form-urlencoded"
         url = self.base + path
         if method == "GET":
             url += "?" + body if body else ""
@@ -198,6 +200,8 @@ def exchange_filters(asset):
 def build_opoco(symbol, asset, bid, ask, limits, *, client_id):
     """One LIMIT BUY and exchange-controlled net-received-quantity OCO exits."""
     bid, ask = D(bid), D(ask)
+    if not all(asset.get(k) is True for k in ("opoAllowed", "otoAllowed", "ocoAllowed")):
+        raise ExecutionDisabled("Instrument has no OPOCO support")
     if bid <= 0 or ask <= bid:
         raise ExecutionDisabled("Invalid market quote")
     tick, step, minqty, mincost = exchange_filters(asset)
@@ -340,7 +344,7 @@ class Supervisor:
             if total_today + self.limits.max_order_usdt > self.limits.max_daily_buy_usdt:
                 raise ExecutionDisabled("Daily notional budget exhausted")
             daily_pnl = sum((D(x["pnl_usdt"]) for x in rows
-                             if x["utc_day"] == today and x["pnl_usdt"] is not None), D(0))
+                             if x["closed"] is not None and datetime.fromtimestamp(float(x["closed"]), timezone.utc).date().isoformat() == today and x["pnl_usdt"] is not None), D(0))
             if daily_pnl <= -self.limits.max_daily_realized_loss_usdt:
                 raise ExecutionDisabled("Daily loss limit reached")
             closed_times = [x["closed"] for x in rows if x["closed"] is not None]
@@ -364,6 +368,8 @@ class Supervisor:
             client_id = "ssc" + secrets.token_hex(9)
             payload, notional = build_opoco(symbol, asset, venue_bid, venue_ask,
                                             self.limits, client_id=client_id)
+            if not (0 <= time.time() - observed_at <= self.limits.max_quote_age_sec) and now > 1000000000:
+                raise ExecutionDisabled("Signal expired during exchange checks")
             # Journal BEFORE any write. Never retry POST after network uncertainty.
             with self.db:
                 self.db.execute(
