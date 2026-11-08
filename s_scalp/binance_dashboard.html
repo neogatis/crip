@@ -1,0 +1,52 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>S-Scalp | Binance</title>
+<style>
+:root{color-scheme:dark;--bg:#08121f;--panel:#112034;--border:#2a4053;--text:#ecf4fd;--muted:#91a5ba;--ok:#57dbb8;--bad:#fa7c83}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:linear-gradient(145deg,#0d2539,var(--bg) 48%);color:var(--text);font:14px system-ui,sans-serif}main{max-width:1220px;padding:25px 17px;margin:auto}
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}header b{font-size:25px;letter-spacing:.08em}header b span{color:var(--ok)}header small{color:var(--muted)}
+.flag{border:1px solid var(--ok);color:var(--ok);background:#163429;border-radius:30px;padding:6px 11px;font-size:12px;font-weight:700}
+.note{padding:13px;margin:17px 0;color:#efdc95;background:#26271d;border:1px solid #504e29;border-radius:9px;line-height:1.5}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin:19px 0}.card,.panel{background:var(--panel);border:1px solid var(--border);border-radius:13px;padding:18px}
+.card small,.muted{color:var(--muted)}.card strong{font-size:25px;display:block;margin-top:7px;word-break:break-all}.panel{margin:15px 0}.panel h2{font-size:16px;margin:0 0 10px}
+table{border-collapse:collapse;width:100%;white-space:nowrap}th,td{text-align:left;padding:11px 9px;border-bottom:1px solid var(--border);font-size:12px}th{color:var(--muted);font-weight:500}tr:last-child td{border-bottom:none}.scroll{overflow-x:auto}.green{color:var(--ok)}.red{color:var(--bad)}.subtle{color:var(--muted);font-size:12px}
+button{background:#233c50;color:#def5ff;border:1px solid #325167;padding:7px 10px;border-radius:9px;cursor:pointer}
+footer{margin:24px 0;color:var(--muted);font-size:12px;line-height:1.6}
+@media(max-width:700px){.cards{grid-template-columns:repeat(2,1fr)}.card strong{font-size:20px}main{padding:15px 10px}}
+</style></head><body><main>
+<header><div><b>S <span>/</span> SCALP · BINANCE</b><div class="subtle">Spot Order Supervisor · v0.3</div></div>
+<div style="display:flex;align-items:center;gap:12px"><span class="flag" id="flag">OBSERVE_ONLY</span><form action="/logout" method="post"><button>Выйти</button></form></div></header>
+<div class="note">Этот терминал показывает сигналы и контроль ордеров. До подтверждения типа Binance-аккаунта и доступа API бот не должен отправлять реальные сделки. Автоматическая прибыль не гарантирована. Защитные приказы не защищают от проскальзывания и полного отказа биржи.</div>
+<section class="cards">
+<div class="card"><small>Поток котировок</small><strong id="feed">—</strong><div class="subtle" id="venue">—</div></div>
+<div class="card"><small>Сигналы после запуска</small><strong id="signals">—</strong><div class="subtle">Momentum + поток покупок</div></div>
+<div class="card"><small>Реализованный P&amp;L</small><strong id="pnl">—</strong><div class="subtle">Только проверенные закрытые сделки</div></div>
+<div class="card"><small>Статус риска</small><strong id="risk">—</strong><div class="subtle" id="reason">—</div></div>
+</section>
+<section class="panel"><h2>Журнал биржевых сделок и контроля</h2>
+<div class="scroll"><table><thead><tr><th>UTC</th><th>Пара</th><th>Ордер</th><th>Сумма, USDT</th><th>Состояние</th><th>Финальный P&amp;L</th></tr></thead><tbody id="trades"><tr><td colspan="6" class="muted">Пока без сделок</td></tr></tbody></table></div></section>
+<section class="panel"><h2>Мониторинг</h2><div id="info" class="muted">Получение данных...</div><div id="error" class="red"></div></section>
+<footer>Изменение стратегии, допуск к Binance Kazakhstan/Global и секреты API настраиваются только на сервере. Эта панель предназначена для наблюдения — она не позволяет снимать защиту или отправлять ордера.</footer>
+</main><script>
+const el=x=>document.getElementById(x);
+const esc=x=>String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const money=x=>Number.isFinite(Number(x))?Number(x).toFixed(4)+" USDT":"—";
+const date=x=>x?new Date(Number(x)*1000).toLocaleString("ru-RU",{timeZone:"UTC",timeZoneName:"short"}):"—";
+async function refresh(){
+ try{
+  const r=await fetch("/api/status",{cache:"no-store"});if(r.status===401){location.href="/login";return}if(!r.ok)throw Error("status "+r.status);
+  const s=await r.json();
+  el("flag").textContent=s.bot_mode;el("feed").textContent=s.market_fresh?"Онлайн":"Нет данных";
+  el("feed").className=s.market_fresh?"green":"red";
+  el("venue").textContent=s.feed+" / "+s.execution_environment;
+  el("signals").textContent=s.signals_since_boot;
+  el("pnl").textContent=money(s.realized_usdt);
+  el("risk").textContent=s.halted?"PAUSED":"Мониторинг";
+  el("risk").className=s.halted?"red":"green";
+  el("reason").textContent=s.halt_reason||"Без блокировок";
+  el("trades").innerHTML=s.trades.length?s.trades.map(t=>"<tr><td>"+date(t.started)+"</td><td>"+esc(t.symbol)+"</td><td>"+esc(t.client_id)+"</td><td>"+esc(t.usdt)+"</td><td>"+esc(t.status)+"</td><td>"+(t.pnl_usdt===null?"—":money(t.pnl_usdt))+"</td></tr>").join(""):'<tr><td colspan="6" class="muted">Реальных ордеров нет</td></tr>';
+  el("info").textContent="Синхронизация "+date(s.updated_at)+" · Последний сигнал котировок "+date(s.last_market_message)+" · Лимит свежести 2,5 с";
+  el("error").textContent=s.last_error||s.market_error||"";
+ }catch(e){el("error").textContent="Ошибка панели: "+e.message}
+}
+refresh();setInterval(refresh,4000);
+</script></body></html>
