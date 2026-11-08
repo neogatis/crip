@@ -98,7 +98,7 @@ class BinanceSpotClient:
         if private:
             if not self.key or not self.secret:
                 raise ExecutionDisabled("No exchange API credentials")
-            args.update(timestamp=str(int(time.time() * 1000)), recvWindow="5000"))
+            args.update(timestamp=str(int(time.time() * 1000)), recvWindow="5000")
         ordered = list(sorted(args.items()))
         if private:
             ordered.append(("signature", hmac_signature(self.secret, ordered)))
